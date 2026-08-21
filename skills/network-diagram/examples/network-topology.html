@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="cobalt">
+<head>
+<meta charset="UTF-8" />
+<title>Network Topology · Example MMS / LMMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ─── Theme variables ─────────────────────────────────────── */
+  :root {
+    --bg-base:        #EFE7D2;
+    --bg-grid-fine:   rgba(90, 70, 45, 0.04);
+    --bg-grid-major:  rgba(90, 70, 45, 0.07);
+    --bg-card:        #FBF6E5;
+    --bg-card-alt:    #F4ECD3;
+    --bg-sunken:      #E1D5B5;
+    --bg-glass:       rgba(251, 246, 229, 0.9);
+
+    --border-base:    rgba(60, 48, 30, 0.22);
+    --border-strong:  rgba(60, 48, 30, 0.42);
+    --border-dashed:  rgba(60, 48, 30, 0.30);
+    --border-faint:   rgba(60, 48, 30, 0.12);
+
+    --text-primary:   #2A2316;
+    --text-secondary: #6A5C46;
+    --text-muted:     #968866;
+    --text-soft:      #B6A883;
+
+    /* Brand accent · default: COBALT · BLUE */
+    --accent:         #2A6DB0;
+    --accent-deep:    #1E5288;
+    --accent-soft:    rgba(42, 109, 176, 0.10);
+    --accent-bg:      rgba(42, 109, 176, 0.05);
+    --accent-border:  rgba(42, 109, 176, 0.42);
+    --accent-on:      #FFFFFF;
+
+    /* Warm secondary (Claude-ish coral) · constant, used for special flows */
+    --warm:           #C25D34;
+    --warm-deep:      #9C4824;
+    --warm-soft:      rgba(194, 93, 52, 0.10);
+    --warm-border:    rgba(194, 93, 52, 0.45);
+  }
+
+  /* Tweakable theme: MOSS · GREEN */
+  [data-theme="moss"] {
+    --accent:         #4F7D2B;
+    --accent-deep:    #3A5C1F;
+    --accent-soft:    rgba(79, 125, 43, 0.10);
+    --accent-bg:      rgba(79, 125, 43, 0.05);
+    --accent-border:  rgba(79, 125, 43, 0.45);
+    --accent-on:      #FFFFFF;
+  }
+
+  /* Optional cool charcoal preset */
+  [data-theme="charcoal"] {
+    --accent:         #2E4756;
+    --accent-deep:    #1E2F38;
+    --accent-soft:    rgba(46, 71, 86, 0.10);
+    --accent-bg:      rgba(46, 71, 86, 0.05);
+    --accent-border:  rgba(46, 71, 86, 0.45);
+    --accent-on:      #FFFFFF;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+  }
+
+  /* ─── Drawing canvas ──────────────────────────────────────── */
+  .blueprint {
+    width: 1920px;
+    height: 1080px;
+    position: relative;
+    background:
+      linear-gradient(var(--bg-grid-fine) 1px, transparent 1px) 0 0 / 40px 40px,
+      linear-gradient(90deg, var(--bg-grid-fine) 1px, transparent 1px) 0 0 / 40px 40px,
+      radial-gradient(ellipse at center, var(--bg-card) 0%, var(--bg-base) 80%);
+    flex-shrink: 0;
+  }
+  .blueprint::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(var(--bg-grid-major) 1px, transparent 1px) 0 0 / 200px 200px,
+      linear-gradient(90deg, var(--bg-grid-major) 1px, transparent 1px) 0 0 / 200px 200px;
+    pointer-events: none;
+  }
+
+  /* ─── Drawing frame corner markers ────────────────────────── */
+  .corner-marker {
+    position: absolute;
+    width: 32px;
+    height: 32px;
+    border: 1.5px solid var(--text-secondary);
+    opacity: 0.5;
+    z-index: 5;
+  }
+  .corner-marker.tl { top: 40px; left: 40px; border-right: 0; border-bottom: 0; }
+  .corner-marker.tr { top: 40px; right: 40px; border-left: 0; border-bottom: 0; }
+  .corner-marker.bl { bottom: 40px; left: 40px; border-right: 0; border-top: 0; }
+  .corner-marker.br { bottom: 40px; right: 40px; border-left: 0; border-top: 0; }
+
+  /* ─── Title block ─────────────────────────────────────────── */
+  .title-block {
+    position: absolute;
+    top: 70px;
+    left: 80px;
+    z-index: 6;
+  }
+  .title-block .crumb {
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    color: var(--text-secondary);
+    margin-bottom: 14px;
+  }
+  .title-block .crumb span.dot { color: var(--accent); margin: 0 8px; }
+  .title-block .main {
+    font-size: 36px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    line-height: 1.05;
+    color: var(--text-primary);
+  }
+  .title-block .main .accent { color: var(--accent); }
+  .title-block .sub {
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    margin-top: 14px;
+    letter-spacing: 0.18em;
+  }
+  .title-block .sub .ref { color: var(--accent); font-weight: 600; }
+
+  /* ─── Theme toggle (top-center) ───────────────────────────── */
+  .theme-toggle {
+    position: absolute;
+    top: 76px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border-base);
+    z-index: 10;
+    box-shadow: 0 2px 8px rgba(60, 48, 30, 0.06);
+  }
+  .theme-toggle .toggle-label {
+    padding: 11px 16px;
+    font-size: 9px;
+    letter-spacing: 0.3em;
+    color: var(--text-muted);
+    border-right: 1px solid var(--border-base);
+    align-self: center;
+    background: var(--bg-card-alt);
+  }
+  .theme-toggle button {
+    background: none;
+    border: 0;
+    border-right: 1px solid var(--border-faint);
+    padding: 11px 18px;
+    font-family: inherit;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.18s, color 0.18s;
+    font-weight: 600;
+  }
+  .theme-toggle button:last-child { border-right: 0; }
+  .theme-toggle button.active {
+    background: var(--accent);
+    color: var(--accent-on);
+  }
+  .theme-toggle button:hover:not(.active) {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .theme-toggle button .swatch {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 7px;
+    vertical-align: -1px;
+  }
+  .theme-toggle button[data-theme-set="cobalt"] .swatch { background: #2A6DB0; }
+  .theme-toggle button[data-theme-set="moss"] .swatch { background: #4F7D2B; }
+  .theme-toggle button[data-theme-set="charcoal"] .swatch { background: #2E4756; }
+
+  /* ─── Legend (top-right) ──────────────────────────────────── */
+  .legend {
+    position: absolute;
+    top: 70px;
+    right: 80px;
+    width: 400px;
+    padding: 18px 22px;
+    border: 1px solid var(--border-base);
+    background: var(--bg-glass);
+    z-index: 6;
+    box-shadow: 0 2px 12px rgba(60, 48, 30, 0.05);
+  }
+  .legend .legend-title {
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    color: var(--accent);
+    margin-bottom: 14px;
+    font-weight: 700;
+  }
+  .legend-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 11px;
+    margin-bottom: 9px;
+    color: var(--text-primary);
+    letter-spacing: 0.04em;
+  }
+  .legend-row:last-child { margin-bottom: 0; }
+  .legend-line { width: 44px; height: 0; flex-shrink: 0; }
+  .legend-line.solid  { border-top: 1.5px solid var(--accent); }
+  .legend-line.dashed { border-top: 1.5px dashed var(--accent); }
+  .legend-line.warm   { border-top: 1.5px solid var(--warm); }
+
+  /* ─── Component box (cards) ───────────────────────────────── */
+  .box {
+    position: absolute;
+    background: var(--bg-card);
+    border: 1px solid var(--border-base);
+    padding: 22px 24px 20px 24px;
+    z-index: 4;
+    box-shadow: 0 1px 0 var(--border-faint), 0 8px 24px rgba(60, 48, 30, 0.05);
+  }
+  .box-corner {
+    position: absolute;
+    width: 11px;
+    height: 11px;
+    border: 1.5px solid var(--accent);
+  }
+  .box-corner.tl { top: -4px; left: -4px; border-right: 0; border-bottom: 0; }
+  .box-corner.tr { top: -4px; right: -4px; border-left: 0; border-bottom: 0; }
+  .box-corner.bl { bottom: -4px; left: -4px; border-right: 0; border-top: 0; }
+  .box-corner.br { bottom: -4px; right: -4px; border-left: 0; border-top: 0; }
+
+  .box-tag {
+    position: absolute;
+    top: -9px;
+    left: 18px;
+    background: var(--bg-base);
+    padding: 0 8px;
+    font-size: 9px;
+    letter-spacing: 0.3em;
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .box-id {
+    position: absolute;
+    top: -9px;
+    right: 18px;
+    background: var(--bg-base);
+    padding: 0 8px;
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: var(--text-muted);
+  }
+  .box-name {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--text-primary);
+    margin-bottom: 3px;
+  }
+  .box-host {
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 0.14em;
+    margin-bottom: 14px;
+  }
+  .box-divider {
+    height: 1px;
+    background: linear-gradient(90deg, var(--border-base) 0%, transparent 100%);
+    margin: 4px 0 12px 0;
+  }
+  .box-spec {
+    font-size: 11.5px;
+    color: var(--text-primary);
+    line-height: 1.8;
+    letter-spacing: 0.02em;
+  }
+  .box-spec .key {
+    color: var(--text-muted);
+    display: inline-block;
+    width: 64px;
+    font-weight: 400;
+  }
+  .box-spec .val { color: var(--text-primary); }
+  .box-spec .pill {
+    display: inline-block;
+    padding: 1px 6px;
+    margin-left: 4px;
+    border: 1px solid var(--accent-border);
+    color: var(--accent);
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    background: var(--accent-bg);
+    font-weight: 600;
+  }
+
+  /* ─── RedHat / MMS Machine sub-sections ───────────────────── */
+  .rh-section {
+    margin-top: 14px;
+    padding: 12px 14px 14px 14px;
+    border: 1px dashed var(--border-dashed);
+    position: relative;
+    background: rgba(255, 255, 255, 0.35);
+  }
+  .rh-section .section-tag {
+    position: absolute;
+    top: -8px;
+    left: 12px;
+    background: var(--bg-card);
+    padding: 0 7px;
+    font-size: 9px;
+    letter-spacing: 0.3em;
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .rh-section .container-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 11px;
+    border: 1px solid var(--border-base);
+    margin-top: 8px;
+    background: var(--accent-bg);
+  }
+  .rh-section .container-row:first-of-type { margin-top: 4px; }
+  .rh-section .container-row .cname {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.05em;
+  }
+  .rh-section .container-row .cstack {
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+  }
+  .rh-section .container-row .cport-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    align-items: flex-end;
+  }
+  .rh-section .container-row .cport-list .cport-line {
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+  }
+  .rh-section .container-row .cport-list .cport-line .ctag {
+    color: var(--text-muted);
+    font-weight: 400;
+    font-size: 9px;
+    letter-spacing: 0.14em;
+  }
+  .rh-section .internal-link {
+    margin-top: 8px;
+    font-size: 9.5px;
+    letter-spacing: 0.18em;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 5px 0 1px 0;
+    border-top: 1px dashed var(--border-faint);
+  }
+  .rh-section .internal-link .arrow { color: var(--accent); margin: 0 6px; font-weight: 700; }
+
+  /* ─── Box positions ───────────────────────────────────────── */
+  .portal       { top: 410px; left: 110px;  width: 230px; height: 200px; }
+  .erp          { top: 650px; left: 110px;  width: 230px; height: 200px; }
+  .win-srv      { top: 365px; left: 460px;  width: 320px; height: 250px; }
+  .redhat       { top: 230px; left: 920px;  width: 500px; height: 500px; }
+  .hmi-pc       { top: 365px; left: 1560px; width: 240px; height: 200px; }
+  .lmms-pc      { top: 660px; left: 1560px; width: 240px; height: 200px; }
+  .mms-machine  { top: 765px; left: 920px;  width: 500px; height: 225px; }
+
+  /* ─── Connection lines layer ──────────────────────────────── */
+  .lines {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 3;
+  }
+
+  /* ─── Flow label pill ─────────────────────────────────────── */
+  .flow-label {
+    position: absolute;
+    background: var(--bg-card);
+    padding: 6px 11px;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    border: 1px solid var(--accent-border);
+    z-index: 6;
+    min-width: 120px;
+    white-space: nowrap;
+    box-shadow: 0 1px 4px rgba(60, 48, 30, 0.07);
+  }
+  .flow-label.warm { border-color: var(--warm-border); }
+  .flow-label .num {
+    position: absolute;
+    top: -7px;
+    left: -7px;
+    width: 18px;
+    height: 18px;
+    background: var(--accent);
+    color: var(--accent-on);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+    letter-spacing: 0;
+  }
+  .flow-label.warm .num { background: var(--warm); }
+  .flow-label .proto {
+    color: var(--accent);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+  }
+  .flow-label.warm .proto { color: var(--warm); }
+  .flow-label .desc {
+    color: var(--text-secondary);
+    font-size: 10px;
+    margin-top: 2px;
+    letter-spacing: 0.04em;
+  }
+
+  /* ─── Zone shades ─────────────────────────────────────────── */
+  .zone-shade {
+    position: absolute;
+    border-left: 1px dashed var(--border-faint);
+    border-right: 1px dashed var(--border-faint);
+    z-index: 1;
+  }
+  .zone-shade .zone-tag {
+    position: absolute;
+    font-size: 9px;
+    letter-spacing: 0.3em;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+  .zone-shade.ext  { top: 200px; height: 690px; left: 90px;   width: 280px; }
+  .zone-shade.srv  { top: 200px; height: 690px; left: 440px;  width: 380px; }
+  .zone-shade.app  { top: 200px; height: 540px; left: 900px;  width: 540px; }
+  .zone-shade.ext .zone-tag,
+  .zone-shade.srv .zone-tag,
+  .zone-shade.app .zone-tag { top: -28px; left: 8px; }
+
+  /* ─── Shop Floor zone · L-shape SVG boundary ─────────────── */
+  .zone-floor-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+  }
+  .zone-floor-label {
+    position: absolute;
+    top: 330px;
+    left: 1624px;
+    font-size: 9px;
+    letter-spacing: 0.3em;
+    color: var(--text-muted);
+    font-weight: 600;
+    z-index: 2;
+    background: var(--bg-base);
+    padding: 0 8px;
+  }
+
+  /* ─── Footer ──────────────────────────────────────────────── */
+  .footer {
+    position: absolute;
+    bottom: 30px;
+    left: 80px;
+    right: 80px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.25em;
+    z-index: 6;
+    border-top: 1px solid var(--border-base);
+    padding-top: 12px;
+  }
+  .footer .stat-block {
+    display: flex;
+    gap: 30px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    letter-spacing: 0.1em;
+  }
+  .footer .stat-block .stat .v {
+    color: var(--accent);
+    font-weight: 700;
+    margin-left: 6px;
+  }
+</style>
+</head>
+<body>
+  <div class="blueprint">
+
+    <!-- frame corner brackets -->
+    <div class="corner-marker tl"></div>
+    <div class="corner-marker tr"></div>
+    <div class="corner-marker bl"></div>
+    <div class="corner-marker br"></div>
+
+    <!-- zone shades -->
+    <div class="zone-shade ext"><span class="zone-tag">ZONE · EXTERNAL</span></div>
+    <div class="zone-shade srv"><span class="zone-tag">ZONE · SERVER ROOM · ADMIN HOST</span></div>
+    <div class="zone-shade app"><span class="zone-tag">ZONE · SERVER ROOM · APP HOST</span></div>
+
+    <!-- Shop Floor unified L-shape zone: HMI PC + LMMS PC + MMS Machine -->
+    <svg class="zone-floor-svg" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+      <!-- L-shape: right column (HMI+LMMS) + bottom arm (MMS Machine) -->
+      <path d="M 1540 340 L 1820 340 L 1820 990 L 900 990 L 900 760 L 1540 760 Z"
+            fill="rgba(60, 48, 30, 0.025)"
+            stroke="rgba(60, 48, 30, 0.22)"
+            stroke-dasharray="6 5"
+            stroke-width="1" />
+    </svg>
+    <div class="zone-floor-label">ZONE · SHOP FLOOR</div>
+
+    <!-- title block -->
+    <div class="title-block">
+      <div class="crumb">DRAWING<span class="dot">·</span>NETWORK TOPOLOGY<span class="dot">·</span>MFG</div>
+      <div class="main">EXAMPLE PLANT<br/>MATERIAL MGMT<span class="accent"> &middot; </span>DEMO-0001</div>
+      <div class="sub">REV <span class="ref">1.2</span> &nbsp;&middot;&nbsp; DRAWING NO <span class="ref">NWK-MFG-001</span> &nbsp;&middot;&nbsp; 2026-05-13</div>
+    </div>
+
+    <!-- theme toggle -->
+    <div class="theme-toggle">
+      <div class="toggle-label">ACCENT</div>
+      <button data-theme-set="cobalt" class="active"><span class="swatch"></span>COBALT · BLUE</button>
+      <button data-theme-set="moss"><span class="swatch"></span>MOSS · GREEN</button>
+      <button data-theme-set="charcoal"><span class="swatch"></span>CHARCOAL</button>
+    </div>
+
+    <!-- legend -->
+    <div class="legend">
+      <div class="legend-title">LINE LEGEND</div>
+      <div class="legend-row"><div class="legend-line solid"></div><span>Production traffic &middot; HTTP / DB / TCP</span></div>
+      <div class="legend-row"><div class="legend-line dashed"></div><span>Admin &middot; Deployment (SSH / SCP / Query)</span></div>
+      <div class="legend-row"><div class="legend-line warm"></div><span>Bootstrap &middot; one-time image pull</span></div>
+    </div>
+
+    <!-- ─── Connection lines (SVG) ─── -->
+    <svg class="lines" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+      <defs>
+        <marker id="arrow-accent" markerWidth="14" markerHeight="14" refX="11" refY="7" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M 0 1 L 11 7 L 0 13 Z" fill="var(--accent)" />
+        </marker>
+        <marker id="arrow-warm" markerWidth="14" markerHeight="14" refX="11" refY="7" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M 0 1 L 11 7 L 0 13 Z" fill="var(--warm)" />
+        </marker>
+      </defs>
+
+      <!-- 1. Vendor portal → Windows Server (warm, bootstrap one-time) -->
+      <path d="M 340 510 L 460 510"
+            stroke="var(--warm)" stroke-width="1.5" fill="none"
+            marker-end="url(#arrow-warm)" />
+
+      <!-- 2. Windows Server → RedHat (dashed, SSH/SCP image deploy) -->
+      <path d="M 780 440 L 870 440 L 870 395 L 920 395"
+            stroke="var(--accent)" stroke-width="1.5" fill="none"
+            stroke-dasharray="8 5"
+            marker-end="url(#arrow-accent)" />
+
+      <!-- 3. Windows Server (DBeaver) → RedHat Postgres (dashed admin DB) -->
+      <path d="M 780 580 L 870 580 L 870 605 L 920 605"
+            stroke="var(--accent)" stroke-width="1.5" fill="none"
+            stroke-dasharray="8 5"
+            marker-end="url(#arrow-accent)" />
+
+      <!-- 4. HMI PC → RedHat React UI (solid prod) -->
+      <path d="M 1560 440 L 1500 440 L 1500 478 L 1420 478"
+            stroke="var(--accent)" stroke-width="1.5" fill="none"
+            marker-end="url(#arrow-accent)" />
+
+      <!-- 5. LMMS PC → RedHat React UI (solid prod) -->
+      <path d="M 1560 730 L 1480 730 L 1480 495 L 1420 495"
+            stroke="var(--accent)" stroke-width="1.5" fill="none"
+            marker-end="url(#arrow-accent)" />
+
+      <!-- 6. MMS Machine PLC → RedHat Python Backend :8081 TCP/IP -->
+      <path d="M 1170 765 L 1170 730"
+            stroke="var(--accent)" stroke-width="1.5" fill="none"
+            marker-end="url(#arrow-accent)" />
+
+      <!-- 7. RedHat Python Backend → Vendor ERP API (HTTP outbound) -->
+      <path d="M 920 375 L 855 375 L 855 742 L 340 742"
+            stroke="var(--accent)" stroke-width="1.5" fill="none"
+            marker-end="url(#arrow-accent)" />
+    </svg>
+
+    <!-- ─── Flow labels ─── -->
+    <div class="flow-label warm" style="top: 430px; left: 340px; white-space: normal; max-width: 100px;">
+      <div class="num">1</div>
+      <div class="proto">HTTPS / 443</div>
+      <div class="desc">docker pull from portal</div>
+    </div>
+
+    <div class="flow-label" style="top: 315px; left: 795px;">
+      <div class="num">2</div>
+      <div class="proto">SSH·SCP / 22</div>
+      <div class="desc">deploy image</div>
+    </div>
+
+    <div class="flow-label" style="top: 615px; left: 795px;">
+      <div class="num">3</div>
+      <div class="proto">POSTGRES / 5432</div>
+      <div class="desc">DBeaver query</div>
+    </div>
+
+    <div class="flow-label" style="top: 405px; left: 1428px;">
+      <div class="num">4</div>
+      <div class="proto">HTTP / 8082</div>
+      <div class="desc">→ React UI · MMS</div>
+    </div>
+
+    <div class="flow-label" style="top: 770px; left: 1428px;">
+      <div class="num">5</div>
+      <div class="proto">HTTP / 8082</div>
+      <div class="desc">→ React UI · LMMS</div>
+    </div>
+
+    <div class="flow-label" style="top: 695px; left: 1230px;">
+      <div class="num">6</div>
+      <div class="proto">TCP/IP / 8081</div>
+      <div class="desc">PLC socket → Python</div>
+    </div>
+
+    <div class="flow-label" style="top: 690px; left: 510px;">
+      <div class="num">7</div>
+      <div class="proto">HTTP / REST</div>
+      <div class="desc">Python backend → ERP API</div>
+    </div>
+
+    <!-- ─── Component boxes ─── -->
+
+    <!-- Vendor share portal -->
+    <div class="box portal">
+      <div class="box-corner tl"></div><div class="box-corner tr"></div>
+      <div class="box-corner bl"></div><div class="box-corner br"></div>
+      <span class="box-tag">CLOUD &middot; EXTERNAL</span>
+      <span class="box-id">EXT-01</span>
+      <div class="box-name">ACME CLOUD</div>
+      <div class="box-host">share.acme.example</div>
+      <div class="box-divider"></div>
+      <div class="box-spec">
+        <div><span class="key">TYPE</span><span class="val">Vendor cloud share</span></div>
+        <div><span class="key">SERVES</span><span class="val">docker images</span></div>
+        <div><span class="key">AUTH</span><span class="val">SSO &middot; federated</span></div>
+        <div><span class="key">ROLE</span><span class="val">File sharing</span></div>
+      </div>
+    </div>
+
+    <!-- Vendor ERP API -->
+    <div class="box erp">
+      <div class="box-corner tl"></div><div class="box-corner tr"></div>
+      <div class="box-corner bl"></div><div class="box-corner br"></div>
+      <span class="box-tag">CLOUD &middot; EXTERNAL ERP</span>
+      <span class="box-id">EXT-02</span>
+      <div class="box-name">ACME ERP</div>
+      <div class="box-host">erp-api.acme.example</div>
+      <div class="box-divider"></div>
+      <div class="box-spec">
+        <div><span class="key">TYPE</span><span class="val">Vendor ERP / API</span></div>
+        <div><span class="key">PROTO</span><span class="val">HTTP / REST</span></div>
+        <div><span class="key">AUTH</span><span class="val">SSO &middot; federated</span></div>
+        <div><span class="key">CALLER</span><span class="val">Python backend</span></div>
+      </div>
+    </div>
+
+    <!-- Windows Server -->
+    <div class="box win-srv">
+      <div class="box-corner tl"></div><div class="box-corner tr"></div>
+      <div class="box-corner bl"></div><div class="box-corner br"></div>
+      <span class="box-tag">SERVER &middot; ADMIN HOST</span>
+      <span class="box-id">WIN-SRV-01</span>
+      <div class="box-name">WINDOWS SERVER</div>
+      <div class="box-host">192.0.2.10 &middot; win-admin-01</div>
+      <div class="box-divider"></div>
+      <div class="box-spec">
+        <div><span class="key">OS</span><span class="val">Windows Server</span></div>
+        <div><span class="key">ROLE</span><span class="val">Jump-host / staging</span></div>
+        <div><span class="key">GUI</span><span class="val">DBeaver</span><span class="pill">→ PG 5432</span></div>
+        <div><span class="key">CLI</span><span class="val">SSH / SCP client</span></div>
+        <div><span class="key">FN&nbsp;1</span><span class="val">Pull image from vendor</span></div>
+        <div><span class="key">FN&nbsp;2</span><span class="val">Push image to RedHat</span></div>
+      </div>
+    </div>
+
+    <!-- RedHat Server -->
+    <div class="box redhat">
+      <div class="box-corner tl"></div><div class="box-corner tr"></div>
+      <div class="box-corner bl"></div><div class="box-corner br"></div>
+      <span class="box-tag">SERVER &middot; APP HOST</span>
+      <span class="box-id">RHEL-APP-01</span>
+      <div class="box-name">REDHAT SERVER</div>
+      <div class="box-host">198.51.100.20 &middot; rhel-app-01</div>
+      <div class="box-divider"></div>
+      <div class="box-spec">
+        <div><span class="key">OS</span><span class="val">Red Hat Enterprise Linux 9.7 (PLOW)</span></div>
+        <div><span class="key">ROLE</span><span class="val">Application + Database host</span></div>
+        <div><span class="key">AUTH</span><span class="val">ssh &middot; key-based</span></div>
+      </div>
+
+      <div class="rh-section">
+        <span class="section-tag">DOCKER ENGINE</span>
+        <div class="container-row">
+          <div>
+            <div class="cname">PYTHON BACKEND</div>
+            <div class="cstack">single-process &middot; MMS + LMMS logic</div>
+          </div>
+          <div class="cstack">container</div>
+          <div class="cport-list">
+            <div class="cport-line">:8080 <span class="ctag">API · HTTP</span></div>
+            <div class="cport-line">:8081 <span class="ctag">TCP / IP socket</span></div>
+          </div>
+        </div>
+        <div class="container-row">
+          <div>
+            <div class="cname">REACT UI</div>
+            <div class="cstack">shared dashboard &middot; MMS &amp; LMMS views</div>
+          </div>
+          <div class="cstack">container</div>
+          <div class="cport-list">
+            <div class="cport-line">:8082 <span class="ctag">web · UI</span></div>
+          </div>
+        </div>
+        <div class="internal-link">REACT UI <span class="arrow">→</span> PYTHON API :8080 &middot; internal call</div>
+      </div>
+
+      <div class="rh-section">
+        <span class="section-tag">SYSTEMD DAEMON &middot; NATIVE</span>
+        <div class="container-row">
+          <div>
+            <div class="cname">POSTGRESQL</div>
+            <div class="cstack">non-containerized</div>
+          </div>
+          <div class="cstack">daemon</div>
+          <div class="cport-list">
+            <div class="cport-line">:5432 <span class="ctag">DB · listen</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HMI PC -->
+    <div class="box hmi-pc">
+      <div class="box-corner tl"></div><div class="box-corner tr"></div>
+      <div class="box-corner bl"></div><div class="box-corner br"></div>
+      <span class="box-tag">CLIENT &middot; OPERATOR</span>
+      <span class="box-id">HMI-01</span>
+      <div class="box-name">HMI PC</div>
+      <div class="box-host">hmi-01.local</div>
+      <div class="box-divider"></div>
+      <div class="box-spec">
+        <div><span class="key">BROWSER</span><span class="val">Google Chrome</span></div>
+        <div><span class="key">TARGET</span><span class="val">MMS view (React UI)</span></div>
+        <div><span class="key">URL</span><span class="val">rhel-app-01:8082</span></div>
+        <div><span class="key">USER</span><span class="val">line operator</span></div>
+      </div>
+    </div>
+
+    <!-- LMMS PC -->
+    <div class="box lmms-pc">
+      <div class="box-corner tl"></div><div class="box-corner tr"></div>
+      <div class="box-corner bl"></div><div class="box-corner br"></div>
+      <span class="box-tag">CLIENT &middot; OPERATOR</span>
+      <span class="box-id">LMMS-01</span>
+      <div class="box-name">LMMS PC</div>
+      <div class="box-host">lmms-01.local</div>
+      <div class="box-divider"></div>
+      <div class="box-spec">
+        <div><span class="key">BROWSER</span><span class="val">Google Chrome</span></div>
+        <div><span class="key">TARGET</span><span class="val">LMMS view (React UI)</span></div>
+        <div><span class="key">URL</span><span class="val">rhel-app-01:8082</span></div>
+        <div><span class="key">USER</span><span class="val">lab operator</span></div>
+      </div>
+    </div>
+
+    <!-- MMS Machine (Shop floor equipment with embedded PLC) -->
+    <div class="box mms-machine">
+      <div class="box-corner tl"></div><div class="box-corner tr"></div>
+      <div class="box-corner bl"></div><div class="box-corner br"></div>
+      <span class="box-tag">EQUIPMENT &middot; SHOP FLOOR</span>
+      <span class="box-id">MCH-MMS-01</span>
+      <div class="box-name">MMS MACHINE</div>
+      <div class="box-host">mch-mms-01 &middot; production line</div>
+
+      <div class="rh-section" style="margin-top: 8px;">
+        <span class="section-tag">EMBEDDED &middot; PLC CONTROLLER</span>
+        <div class="container-row">
+          <div>
+            <div class="cname">PLC</div>
+            <div class="cstack">TCP/IP socket client &middot; initiates connection to rhel-app-01</div>
+          </div>
+          <div class="cstack">controller</div>
+          <div class="cport-list">
+            <div class="cport-line">→ :8081 <span class="ctag">socket · Python backend</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- footer -->
+    <div class="footer">
+      <div>SHEET 1 OF 1 &middot; SCALE 1:1 &middot; NTS</div>
+      <div class="stat-block">
+        <div class="stat">NODES<span class="v">7</span></div>
+        <div class="stat">FLOWS<span class="v">7</span></div>
+        <div class="stat">ZONES<span class="v">3</span></div>
+        <div class="stat">PORTS<span class="v">6</span></div>
+      </div>
+      <div>EXAMPLE &middot; UNCLASSIFIED</div>
+    </div>
+
+  </div>
+
+  <script>
+    document.querySelectorAll('.theme-toggle [data-theme-set]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const theme = btn.dataset.themeSet;
+        document.documentElement.dataset.theme = theme;
+        document.querySelectorAll('.theme-toggle [data-theme-set]').forEach(b =>
+          b.classList.toggle('active', b === btn)
+        );
+        try { localStorage.setItem('netDiagTheme', theme); } catch (e) {}
+      });
+    });
+    try {
+      const saved = localStorage.getItem('netDiagTheme');
+      if (saved) {
+        const btn = document.querySelector('.theme-toggle [data-theme-set="' + saved + '"]');
+        if (btn) btn.click();
+      }
+    } catch (e) {}
+  </script>
+</body>
+</html>
