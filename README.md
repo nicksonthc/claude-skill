@@ -9,27 +9,39 @@ skill here immediately changes the skill Claude Code loads.
 | Skill                                    | What it does                                                                                  |
 | ---------------------------------------- | --------------------------------------------------------------------------------------------- |
 | [`network-diagram`](skills/network-diagram/) | Renders a printable engineering-blueprint network topology as one self-contained 1920x1080 HTML file. |
+| [`r3f-hero-camera`](skills/r3f-hero-camera/) | Cinematic camera rig for React Three Fiber: shot vocabulary, stutter-free follow cam, attract orbit, ortho/perspective switching, writer-priority ladder. |
+| [`interactive-3d-object`](skills/interactive-3d-object/) | AAA hover/select feedback for R3F objects: design tokens, status→color language, ObjectFX overlay (rings, glow, ripple, burst, label), hover tooltip, action previews. |
+| [`guided-placement`](skills/guided-placement/) | Multi-stage drag-to-place choreography for R3F: glow + lift + flowing path + holo ring + magnetic snap + success pop, with object-aware placement policies. |
+
+The three R3F skills compose: `guided-placement` delegates camera framing to
+`r3f-hero-camera` and layers onto `interactive-3d-object`'s hover/select base.
+Each also stands alone.
 
 ## Install
 
-Symlink a skill into the global skills directory:
+### With the skills CLI (any machine, one command)
 
 ```bash
-ln -s "$PWD/skills/network-diagram" ~/.claude/skills/network-diagram
+npx skills add nicksonthc/claude-skill            # pick skills interactively
+npx skills add nicksonthc/claude-skill -g         # global (~/.claude/skills)
+npx skills add nicksonthc/claude-skill@r3f-hero-camera   # just one skill
 ```
 
-Then invoke it as `/network-diagram`, or just ask for a network diagram and
-Claude will pick it up from the description.
+The [skills CLI](https://skills.sh) scans the repo for `SKILL.md` files, so the
+`skills/<name>/` layout here is picked up automatically.
 
-To install every skill in this repo:
+### By symlink (my laptops — repo stays the live source of truth)
 
 ```bash
+git clone git@github.com:nicksonthc/claude-skill.git
+cd claude-skill
 for s in skills/*/; do
   ln -sfn "$PWD/$s" "$HOME/.claude/skills/$(basename "$s")"
 done
 ```
 
-Verify Claude Code sees them with `/skills`.
+Editing a skill in the repo then immediately changes what Claude Code loads.
+Verify with `/skills`, or invoke one as `/<name>`.
 
 ## Layout
 
