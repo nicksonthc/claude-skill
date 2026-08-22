@@ -12,6 +12,7 @@ skill here immediately changes the skill Claude Code loads.
 | [`r3f-hero-camera`](skills/r3f-hero-camera/) | Cinematic camera rig for React Three Fiber: shot vocabulary, stutter-free follow cam, attract orbit, ortho/perspective switching, writer-priority ladder. |
 | [`interactive-3d-object`](skills/interactive-3d-object/) | AAA hover/select feedback for R3F objects: design tokens, status→color language, ObjectFX overlay (rings, glow, ripple, burst, label), hover tooltip, action previews. |
 | [`guided-placement`](skills/guided-placement/) | Multi-stage drag-to-place choreography for R3F: glow + lift + flowing path + holo ring + magnetic snap + success pop, with object-aware placement policies. |
+| [`harvest-skill`](skills/harvest-skill/) | Meta-skill: harvest a feature from whatever repo you're in into a new generic skill here — distill, genericize, author, symlink, commit. |
 
 The three R3F skills compose: `guided-placement` delegates camera framing to
 `r3f-hero-camera` and layers onto `interactive-3d-object`'s hover/select base.
