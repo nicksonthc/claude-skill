@@ -14,6 +14,9 @@ skill here immediately changes the skill Claude Code loads.
 | [`guided-placement`](skills/guided-placement/) | Multi-stage drag-to-place choreography for R3F: glow + lift + flowing path + holo ring + magnetic snap + success pop, with object-aware placement policies. |
 | [`harvest-skill`](skills/harvest-skill/) | Meta-skill: harvest a feature from whatever repo you're in into a new generic skill here — distill, genericize, author, symlink, commit. |
 | [`system-status-popover`](skills/system-status-popover/) | Honest system-status indicator for a SPA + API app: beating status dot → popover with backend health, Socket.IO state, and build provenance (git SHA → Docker build args → /health + bundle). |
+| [`keyboard-first-hotkeys`](skills/keyboard-first-hotkeys/) | Keyboard-first interaction system for kiosk / scan-gun React apps: one hotkey catalogue driving bindings + button hints + cheatsheet, a focus chain, and a focus guard that recovers focus lost to re-renders. |
+| [`socketio-realtime-hooks`](skills/socketio-realtime-hooks/) | React hook suite for a Socket.IO feed: one authenticated connection, never-rebinding event listeners, auto re-joining rooms, X-Client-Id ↔ skip_sid echo suppression, presence, and poll-self-heal composition. |
+| [`toast-notification-history`](skills/toast-notification-history/) | Toasts with an audit trail: drop-in sonner wrapper that mirrors every toast into a capped localStorage history with the acting user stamped on, shown in a floating-bell slide-over with unread badge. |
 
 The three R3F skills compose: `guided-placement` delegates camera framing to
 `r3f-hero-camera` and layers onto `interactive-3d-object`'s hover/select base.
