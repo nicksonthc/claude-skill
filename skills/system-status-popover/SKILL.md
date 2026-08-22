@@ -19,7 +19,9 @@ popover primitive is swappable.
    surfaced by both the endpoint and the bundle.
 3. **`usePolling`** — interval fetch with a race guard, pause, manual refetch.
 4. **Socket hooks** — `useSocketConnected` + `useSocketTransport`. Optional:
-   an app with no realtime feed drops the whole Realtime section.
+   an app with no realtime feed drops the whole Realtime section. The full
+   realtime suite (provider, rooms, echo suppression) is its own skill:
+   `socketio-realtime-hooks`.
 5. **Status language** — five tones (`ready / live / hold / fault / idle`) +
    `StatusChip`; status is the one place the UI spends color.
 6. **`SystemStatus`** — compact trigger (dot beats when all-OK, pulses when
