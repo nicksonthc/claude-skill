@@ -17,6 +17,9 @@ drei). Copy-paste building blocks live in [REFERENCE.md](REFERENCE.md).
 **Sibling skills this composes with:**
 - `interactive-3d-object` — hover/select FX on the objects the camera frames.
 - `guided-placement` — delegates its grab-framing stage to this rig.
+- `r3f-scene-world` — the world these shots frame: authoring frame, batched
+  geometry, placements, and the one case that wants a path instead of poses (a
+  continuous scripted walk).
 
 ## The shot vocabulary
 

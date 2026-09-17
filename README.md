@@ -12,6 +12,7 @@ skill here immediately changes the skill Claude Code loads.
 | [`r3f-hero-camera`](skills/r3f-hero-camera/) | Cinematic camera rig for React Three Fiber: shot vocabulary, stutter-free follow cam, attract orbit, ortho/perspective switching, writer-priority ladder. |
 | [`interactive-3d-object`](skills/interactive-3d-object/) | AAA hover/select feedback for R3F objects: design tokens, status→color language, ObjectFX overlay (rings, glow, ripple, burst, label), hover tooltip, action previews. |
 | [`guided-placement`](skills/guided-placement/) | Multi-stage drag-to-place choreography for R3F: glow + lift + flowing path + holo ring + magnetic snap + success pop, with object-aware placement policies. |
+| [`r3f-scene-world`](skills/r3f-scene-world/) | Large hand-authored R3F worlds: one deformable authoring frame shared by geometry, placements, scatter and camera routes; merged bulk geometry; instanced-scatter triangle budget; per-frame store discipline; scripted first-person route with one camera owner; Playwright stills + clearance sweeps. |
 | [`harvest-skill`](skills/harvest-skill/) | Meta-skill: harvest a feature from whatever repo you're in into a new generic skill here — distill, genericize, author, symlink, commit. |
 | [`system-status-popover`](skills/system-status-popover/) | Honest system-status indicator for a SPA + API app: beating status dot → popover with backend health, Socket.IO state, and build provenance (git SHA → Docker build args → /health + bundle). |
 | [`keyboard-first-hotkeys`](skills/keyboard-first-hotkeys/) | Keyboard-first interaction system for kiosk / scan-gun React apps: one hotkey catalogue driving bindings + button hints + cheatsheet, a focus chain, and a focus guard that recovers focus lost to re-renders. |
@@ -20,9 +21,10 @@ skill here immediately changes the skill Claude Code loads.
 | [`bilingual-copy-store`](skills/bilingual-copy-store/) | Two-language (or N-language) UI with one shared copy dictionary, a Zustand-backed toggle that persists and stays in sync across every page of a multi-entry app, typed keys for dynamic/status text, and a safe overlay for translating strings that live in generator-owned JSON. |
 | [`image-to-3d-blender`](skills/image-to-3d-blender/) | Reference image → GLB with headless Blender: silhouette extrusion for flat/transparent images, or reference-guided procedural studies (buildings, boats, trees, figures) via a shared `studio.py` helper library, with transparent preview, .blend and manifest entry. |
 
-The three R3F skills compose: `guided-placement` delegates camera framing to
-`r3f-hero-camera` and layers onto `interactive-3d-object`'s hover/select base.
-Each also stands alone.
+The R3F skills compose: `guided-placement` delegates camera framing to
+`r3f-hero-camera` and layers onto `interactive-3d-object`'s hover/select base;
+`r3f-scene-world` builds the world those three act in, and hands its GLB
+authoring to `image-to-3d-blender`. Each also stands alone.
 
 ## Install
 
