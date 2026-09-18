@@ -1,6 +1,6 @@
 ---
 name: r3f-scene-world
-description: Build and maintain a large hand-authored 3D world in React Three Fiber — one deformable authoring frame shared by procedural geometry, placed GLB models, scattered instances and camera routes; tens of thousands of primitives merged into a few draw calls; an instanced-vegetation triangle budget; a store/useFrame split that keeps per-frame values out of React; a first-person scroll-driven tour with exactly one camera owner; and Playwright checks that screenshot the world instead of trusting it. Use when building a town, landscape, campus, factory or level scene, placing many GLB models from config, scattering trees/props by rule, authoring a guided walkthrough or fly-through, or when a big R3F scene has gone slow, unverifiable or impossible to re-place.
+description: Build and maintain a large hand-authored 3D world in React Three Fiber — one deformable authoring frame shared by procedural geometry, placed GLB models, scattered instances and camera routes; tens of thousands of primitives merged into a few draw calls; an instanced-vegetation triangle budget; a store/useFrame split that keeps per-frame values out of React; a first-person scroll-driven tour with exactly one camera owner; weather as one shared state with instanced rain and species-aware falling leaves shed by the actual trees; and Playwright checks that screenshot the world instead of trusting it. Use when building a town, landscape, campus, factory or level scene, placing many GLB models from config, scattering trees/props by rule, adding drizzle, wind, drifting leaves or blossom to an existing scene, authoring a guided walkthrough or fly-through, or when a big R3F scene has gone slow, unverifiable or impossible to re-place.
 ---
 
 # R3F Scene World
@@ -67,7 +67,11 @@ nobody can place anything in.
    coordinate lives in a module ref, never in state.
 7. **Move through it** (§6) — hero shots for interaction, an authored route for
    a scripted walk. One writer per frame, always.
-8. **Verify with pictures** (§7) — a Playwright check that gates on a ready
+8. **Add weather as one state** (§9) — if the world has rain, wind, shed leaves
+   or a changing sky, they share a single parameter object and a single
+   simulation clock, and every particle field is one instanced draw. Leaves are
+   resolved from the species the scatter placed, and emitted from real crowns.
+9. **Verify with pictures** (§7) — a Playwright check that gates on a ready
    flag, seeks to fixed coordinates, screenshots each stop, and probes
    clearance and mounting. A world is not verified by a passing type check.
 
@@ -88,6 +92,9 @@ nobody can place anything in.
    scene before writing a camera key or a placement against them.
 8. **Verified means photographed.** Stills at fixed coordinates, committed to
    an artifacts directory, reviewed by eye.
+9. **A particle belongs to its source.** Leaves come off the species that
+   actually stands there; rain reads against what is behind it. Both are one
+   instanced field driven by the scene's own clock, never a node per particle.
 
 ## Pitfalls
 
@@ -127,6 +134,31 @@ nobody can place anything in.
 - **Software-rendered CI frames are slow.** Playwright on swiftshader can need
   60–180 s for one frame of a heavy scene; set the timeouts, seek by an exposed
   handle instead of scrolling and hoping, and keep viewports modest.
+- **A component per particle.** One fibre, node or object per raindrop or leaf
+  costs a reconciliation pass per frame and dies at a few hundred; one instanced
+  draw per species carries thousands. This is the most common way a weather
+  layer takes a scene from 60 to 20 fps.
+- **Leaves that do not match their tree.** A generic leaf falling past five
+  distinct species reads as confetti immediately, and a silent fallback profile
+  hides it in review. Resolve the profile by species key and throw on unknown.
+- **Emitting from a box over the camera.** It is the fastest way to build a leaf
+  field and the first thing a viewer notices, because leaves appear where no
+  tree is. Emit from the real crowns, capped by camera distance.
+- **Drizzle tuned against the sky.** Raising opacity until light rain reads
+  against bright sky gives film scratches; it must be near-invisible there and
+  legible against dark tile and water, with ripples and wet stone carrying the
+  rest.
+- **Wall-clock particles in a capture mode.** A field driven by
+  `performance.now()` renders differently on every run, so a pinned-time still
+  can never be compared against its baseline. Drive it from the simulation
+  clock the pause and capture modes control.
+- **A second fog.** Weather that adds its own fog on top of the scene's mist
+  control gives two contradicting depth cues and an unfixable look; ride the
+  existing control.
+- **Mechanically looped atmosphere.** Fixed birth cadence, one shared flutter
+  phase, constant wind: all visible within a minute on a stationary camera.
+  Irregular intervals, per-particle phase, and wind that drifts on its own slow
+  schedule.
 - **Disposal on hot reload.** A memoised imperative world outlives the component
   unless it disposes its own geometry, materials and maps.
 
@@ -137,6 +169,9 @@ is a good companion set, written for vanilla three.js in a single file — take
 the reasoning, not the code, and never a second `requestAnimationFrame` loop.
 `3d-virtual-tour` informed §6 here (route authoring, one camera owner, stop
 registry, inspection handoff). `3d-high-poly-models` (LOD) and `3d-four-seasons`
-pair well with §4. `3d-retina-resolution` conflicts with any scene that caps DPR
+pair well with §4, and `3d-falling-leaves` with §9. For the engine-neutral craft
+rules behind §9 — the 微雨 bright-sky drizzle preset, species-aware shedding,
+the three wind layers and the acceptance checks — see the `3d` router skill and
+its `rainfall-effects`, `falling-leaves` and `sky-cloud-systems` specialists. `3d-retina-resolution` conflicts with any scene that caps DPR
 and runs `AdaptiveDpr`: at four times the fragment cost, a fill-bound world
 cannot pay for it.
