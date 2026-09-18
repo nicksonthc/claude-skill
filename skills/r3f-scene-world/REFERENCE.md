@@ -510,3 +510,234 @@ useFrame(() => { if (useAppStore.getState().editing) gl.shadowMap.needsUpdate = 
 - A quality tier chosen from a first-second frame-time probe is worth more than
   any single micro-optimisation: tier down to no DoF, no bloom, no scatter
   shadows, DPR 1.
+
+---
+
+## 9. Weather and shed particles
+
+One weather state, layered wind, and particle fields that belong to the objects
+they come from. The engine-neutral craft rules for these live in the `3d`
+specialist guides (`rainfall-effects`, `falling-leaves`, `sky-cloud-systems`);
+this section is the R3F shape.
+
+### 9.1 One state, one clock
+
+```ts
+// src/weather/state.ts — parameters in the store (the overlay re-renders on
+// these), simulation time in a module ref (it changes every frame).
+export interface Weather {
+  rainIntensity: number;   // 0 drizzle-off … 1 downpour
+  wetness: number;         // 0 dry … 1 soaked; rises with rain, dries on a curve
+  fogDensity: number;
+  skyBrightness: number;
+  cloudiness: number;
+  windStrength: number;    // base vector magnitude
+  gustStrength: number;    // swell amplitude
+  turbulence: number;      // small-scale noise amplitude
+  leafCount: number;       // live budget, not a per-frame count
+  leafFallSpeed: number;
+  seed: number;
+}
+
+export const sim = { t: 0 };   // seconds. Advanced by ONE useFrame, below.
+
+/**
+ * Advance once per frame, from the clock the host's pause and capture modes
+ * control. Everything else reads `sim.t` — never performance.now(), or a still
+ * pinned at a given scene time differs between runs and comparison shots are
+ * worthless.
+ */
+export function WeatherClock() {
+  useFrame((_, delta) => {
+    const { paused } = useAppStore.getState();
+    if (!paused) sim.t += Math.min(delta, 0.05);
+  });
+  return null;
+}
+```
+
+### 9.2 Layered wind
+
+```ts
+// Global direction + gusts (seconds) + turbulence (per-position noise).
+// Same function for leaves, rain slant, foliage sway and banners.
+const dir = new Vector3(0.82, 0, 0.57).normalize();
+
+export function windAt(p: Vector3, t: number, w: Weather, out: Vector3) {
+  // Base: direction turns slowly, so the shot's drift is never quite constant.
+  const turn = Math.sin(t * 0.017) * 0.35;
+  out.set(dir.x * Math.cos(turn) - dir.z * Math.sin(turn), 0, dir.x * Math.sin(turn) + dir.z * Math.cos(turn));
+  out.multiplyScalar(w.windStrength);
+
+  // Gusts: two detuned slow waves, travelling across the world along the wind
+  // axis (the phase depends on position) so the field does not surge as one.
+  const travel = (p.x * dir.x + p.z * dir.z) * 0.04;
+  const gust = (Math.sin(t * 0.21 - travel) * 0.6 + Math.sin(t * 0.09 - travel * 0.7) * 0.4);
+  out.addScaledVector(out.clone().normalize(), Math.max(0, gust) * w.gustStrength);
+
+  // Turbulence: cheap curl-ish noise. This is what makes a leaf spiral and
+  // occasionally lift instead of tracking a clean parabola.
+  const n = (a: number, b: number, c: number) => Math.sin(a * 1.7 + t * 0.9) * Math.cos(b * 1.3 - t * 0.7) * Math.sin(c * 2.1 + t * 0.5);
+  out.x += n(p.z * 0.3, p.y * 0.4, p.x * 0.2) * w.turbulence;
+  out.y += n(p.x * 0.25, p.z * 0.35, p.y * 0.3) * w.turbulence * 0.8;
+  out.z += n(p.y * 0.2, p.x * 0.3, p.z * 0.25) * w.turbulence;
+  return out;
+}
+```
+
+### 9.3 The leaf belongs to its tree
+
+Resolve the shed profile from the species the scatter already placed (§4), and
+emit from real crowns — never a box over the camera.
+
+```ts
+// src/weather/leafProfiles.ts
+export interface LeafProfile {
+  kind: 'leaf' | 'petal' | 'strand';
+  colors: string[];          // per-leaf pick, not one tint for the field
+  size: [number, number];    // metres, at world scale
+  drag: number;              // higher = slower terminal fall
+  flutter: [number, number]; // Hz band
+  spin: [number, number];    // rad/s band, applied on two axes
+  rate: number;              // releases per crown per second at windStrength 1
+  season?: (t: number) => number;   // 0..1 gate; blossom only in its window
+}
+
+// Keyed by the SAME species id the placements use. Unknown key throws — a silent
+// generic-leaf fallback is invisible in review and obvious on screen.
+export const LEAF_PROFILES: Record<string, LeafProfile> = {
+  'weeping-willow':      { kind: 'strand', colors: ['#8fa06a', '#9fae7c'], size: [0.10, 0.20], drag: 0.7, flutter: [1.2, 2.2], spin: [0.6, 1.8], rate: 0.10 },
+  'camphor-tree':        { kind: 'leaf',   colors: ['#6f8a5a', '#87a06b'], size: [0.07, 0.13], drag: 1.5, flutter: [0.5, 1.1], spin: [0.8, 2.4], rate: 0.16 },
+  'osmanthus-tree':      { kind: 'petal',  colors: ['#e8c877', '#f0d89a'], size: [0.02, 0.04], drag: 2.2, flutter: [1.6, 2.8], spin: [1.2, 3.0], rate: 0.22, season: autumnWindow },
+  'peach-blossom-tree':  { kind: 'petal',  colors: ['#f2c2cc', '#f7d7de'], size: [0.03, 0.05], drag: 2.4, flutter: [1.4, 2.6], spin: [1.0, 2.6], rate: 0.30, season: springWindow },
+  'plum-blossom-tree':   { kind: 'petal',  colors: ['#f6e3ea', '#ffffff'], size: [0.025, 0.045], drag: 2.4, flutter: [1.5, 2.7], spin: [1.0, 2.6], rate: 0.26, season: earlySpringWindow },
+};
+
+export const profileFor = (species: string) => {
+  const p = LEAF_PROFILES[species];
+  if (!p) throw new Error(`No leaf profile for species "${species}" — add one or exclude it from shedding.`);
+  return p;
+};
+```
+
+```ts
+// Emitters are the trees themselves: crown centre and radius from the placement.
+export const emitters = placements
+  .filter((p) => p.species in LEAF_PROFILES)
+  .map((p) => ({
+    species: p.species,
+    // Crown sits in the upper third of the tree; radius scales with the instance.
+    origin: new Vector3(p.position[0], p.position[1] + p.height * p.scale * 0.72, p.position[2]),
+    radius: p.crownRadius * p.scale,
+    rate: profileFor(p.species).rate,
+  }));
+
+/** Only crowns near the camera emit; count and emitters are both capped. */
+export function activeEmitters(camera: Vector3, budget = 12) {
+  return emitters
+    .map((e) => ({ e, d: e.origin.distanceToSquared(camera) }))
+    .filter(({ d }) => d < 45 * 45)
+    .sort((a, b) => a.d - b.d)
+    .slice(0, budget)
+    .map(({ e }) => e);
+}
+```
+
+### 9.4 One instanced field per species
+
+```tsx
+function LeafField({ species }: { species: string }) {
+  const profile = profileFor(species);
+  const cap = Math.round(useAppStore.getState().weather.leafCount * shareFor(species));
+  const mesh = useRef<InstancedMesh>(null);
+
+  // Pool: plain typed arrays, allocated once. No object churn, no per-leaf node.
+  const pool = useMemo(() => ({
+    pos: new Float32Array(cap * 3), vel: new Float32Array(cap * 3),
+    spin: new Float32Array(cap * 3), quat: new Float32Array(cap * 4),
+    size: new Float32Array(cap), phase: new Float32Array(cap),
+    age: new Float32Array(cap), life: new Float32Array(cap),
+    alive: new Uint8Array(cap), head: 0, births: 0,
+  }), [cap]);
+
+  useFrame((_, delta) => {
+    const dt = Math.min(delta, 0.05);
+    const w = useAppStore.getState().weather;
+    if (useAppStore.getState().paused) return;
+
+    // Fractional births: accumulate a rate, never spawn a fixed count per frame.
+    // Poisson-ish irregularity comes from the random threshold, not a jittered cadence.
+    for (const e of activeEmitters(cameraPos)) {
+      pool.births += e.rate * (0.6 + w.windStrength * 0.8) * gustNow(w) * dt;
+      while (pool.births > 1) { pool.births -= 1; if (rand() < 0.85) spawn(pool, e, profile, w); }
+    }
+
+    // Integrate. Broadside drag slows a leaf; edge-on it slips — that asymmetry
+    // is most of what separates a leaf from a falling coin.
+    for (let i = 0; i < cap; i++) {
+      if (!pool.alive[i]) continue;
+      p.fromArray(pool.pos, i * 3); v.fromArray(pool.vel, i * 3);
+      windAt(p, sim.t, w, wind);
+      const face = Math.abs(Math.sin(pool.phase[i] + sim.t * pool.spin[i * 3 + 1]));   // 0 edge-on … 1 broadside
+      const drag = profile.drag * (0.45 + face) * (1 + w.wetness * 0.6);               // wet leaves fall heavier
+      v.addScaledVector(gravity, dt * (1 - w.wetness * 0.05));
+      v.addScaledVector(wind.sub(v), Math.min(1, drag * dt));
+      v.y -= v.y * face * drag * dt * 0.5;                                             // stall on the broadside
+      p.addScaledVector(v, dt * w.leafFallSpeed);
+      // … write back, advance the two spin axes, age, recycle on contact/lifetime …
+    }
+    // One buffer upload for the whole species.
+    mesh.current!.instanceMatrix.needsUpdate = true;
+  });
+
+  return (
+    <instancedMesh ref={mesh} args={[leafGeometry(profile), leafMaterial(profile), cap]} frustumCulled={false}>
+    </instancedMesh>
+  );
+}
+```
+
+At high counts move the whole integration into the vertex shader: upload seed,
+birth time, size and profile constants once per instance, evaluate position and
+orientation from `uTime` plus the wind uniforms, and accept that collision and
+settling are no longer available.
+
+### 9.5 Drizzle that reads by contrast
+
+```ts
+// Streaks are one instanced field in a camera-following volume; drops keep
+// world motion so rotating the camera never drags the rain with it.
+// Fragment: fade the streak toward the sky and hold it against dark geometry.
+const fragment = /* glsl */ `
+  varying float vDepthFade;
+  varying float vSeed;
+  uniform float uIntensity;
+  void main() {
+    // Sparse and fine: opacity is low, length is short, and the streak all but
+    // disappears against a bright background. Legibility comes from what is
+    // BEHIND it, not from raising the count.
+    float core = smoothstep(1.0, 0.0, abs(vUv.x - 0.5) * 2.0);
+    float alpha = core * 0.18 * uIntensity * vDepthFade;
+    gl_FragColor = vec4(vec3(0.86, 0.90, 0.94), alpha);
+  }
+`;
+```
+
+- Bias the spawn volume toward the darker half of the shot rather than raising
+  global density — a drizzle that reads everywhere is no longer a drizzle.
+- Drive `uIntensity` from `rainIntensity` modulated a few percent by a slow
+  `sim.t` wave, so the fall breathes.
+- Ripples, darkened stone and eave drips carry the read at this intensity; build
+  them before the streaks.
+- Keep bloom thresholds high (this project's is 0.82); check the brightest sky
+  region with the effect on and off.
+
+### 9.6 What this must not break
+
+- `paused` freezes weather with the rest of the scene.
+- The existing fog/mist control stays the single source of `fogDensity`; weather
+  rides it rather than adding a second fog.
+- Particle fields do not need shadow-map refreshes — keep the cached shadow map
+  (§8) and exclude them from `castShadow`.
+- Clearance and walk probes already skip `InstancedMesh` (§7.3), which is what
+  keeps a leaf field from reading as a wall.
