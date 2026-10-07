@@ -8,9 +8,9 @@ description: In-app smart guide for a web dashboard. A "What do you want to do?"
 Harvested from an operator dashboard for a warehouse robot cube, where support staff
 needed to find actions like "add obstacle", "revive robot" and "halt cube",
 and to diagnose cases like "TC says empty but the robot holds a bin → flag
-picked". Proven on Vue 2.6 · Vuetify 2 · vue-router 3 (hash) · Vite 4, with
-Playwright 1.4x driving a Python mock backend. The engine is plain JS. Only the
-overlay and the search box are framework components, and they are thin.
+picked". Framework-free: the engine and the overlay are plain JS and DOM, and
+they bind to any front end through `subscribe`. Proven in production with a
+component-library UI, with Playwright driving a Python mock backend.
 
 ## The idea in one line
 
@@ -36,10 +36,10 @@ user's own hands do every step.
    check per frame, plus a 500 ms poll. It waits for the target, hands it to the
    overlay, and advances on the user's action. It keeps history so Back works across
    branches, and it records answers for the case summary.
-4. **Spotlight overlay**: a dim layer cut out around the target (a huge
-   box-shadow around a hole, `pointer-events: none`), a pulsing ring, and a step
-   card. It tracks the target every animation frame.
-5. **Search box**: an autocomplete in the app bar with a Ctrl/Cmd+K shortcut. It scores
+4. **Spotlight overlay** (plain DOM, mounted once): a dim layer cut out around
+   the target (a huge box-shadow around a hole, `pointer-events: none`), a pulsing
+   ring, and a step card. It tracks the target every animation frame.
+5. **Search box**: the app's own combobox in the app bar with a Ctrl/Cmd+K shortcut. It scores
    matches by prefix, then word, then edit-distance ≤1, then subsequence. It pulls a number out
    of the query ("revive 12") into the task's `param`.
 6. **Facts layer** (`guideFacts.js`): read-only loaders that fill `ctx` (the
@@ -55,11 +55,12 @@ user's own hands do every step.
    selection, a role gate). A subagent sweep works well here. This list *is* the
    step list.
 2. **Anchor.** Add `data-guide` attributes only, with no behaviour change. For table rows
-   use the table's row-class hook (`item-class`) to tag `guide-<kind>-<id>`.
+   use the table's row-class hook to tag `guide-<kind>-<id>`.
    For state the guide must read, bind a `data-*` attribute.
 3. **Drop in** the engine, search, overlay and catalogue from
-   `REFERENCE.md` §1–§5. Then fill in the **UI adapter** (§2): which selectors
-   mean "menu open" and "dialog open", and how to go from an input to its field wrapper.
+   `REFERENCE.md` §1–§5. Then fill in the **UI adapter** (§2) by inspecting
+   the app's markup: which selectors mean "menu open" and "dialog open", how to go
+   from an input to its field wrapper, and what "disabled" looks like.
 4. **Author linear tasks** first (navigate → open → fill → final). Every
    path ends on a `final` step.
 5. **Author troubleshooting tasks** (§6), one evidence step per check, ordered from
@@ -94,8 +95,8 @@ user's own hands do every step.
 
 ## Pitfalls (each one bit once)
 
-- **Wrappers drop the attribute on an inner node.** Vuetify puts
-  `data-guide` on the bare `<input>` of a field or select. Spotlight
+- **Wrappers drop the attribute on an inner node.** Component libraries often
+  pass `data-guide` through to the bare `<input>` of a field or select. Spotlight
   `el.closest(<field wrapper>)` instead. A combobox's input can be 0 px tall,
   so check visibility on the wrapper, not the input.
 - **Closed dialogs and `v-show` stay in the DOM.** "Exists" is not "visible".
@@ -110,9 +111,11 @@ user's own hands do every step.
 - **Values set by code fire no mutation.** A field filled from a socket reply
   changes `.value`, not an attribute. The 500 ms poll catches it, and the card
   recomputes notes on a slow pulse so a live mismatch warning updates as the user types.
-- **The autocomplete clears its search text after a pick.** To prefill "flag pick
-  " and wait for the number, clear the model first, then set the text in a
-  `setTimeout` (~100 ms). `$nextTick` loses the race.
+- **The combobox clears its search text after a pick.** To prefill "flag pick
+  " and wait for the number, clear the selection first, then set the text in a
+  `setTimeout` (~100 ms). A same-tick or next-tick write loses the race.
+- **Rebuilding the card on a timer swallows clicks.** If nodes are replaced
+  between mousedown and mouseup, the click is lost. Re-render only when the shown content changes.
 - **Enter in a form may submit before the "press Confirm" step.** Advance on the
   outcome (`appear` of the results), not on the click.
 - **Routes:** a task may visit several pages (`routes: [...]`). End the guide
@@ -129,7 +132,7 @@ user's own hands do every step.
 
 - **UI adapter:** the menu-open selector, dialog-open selector, field wrapper,
   disabled-button class, and the list of state attributes to observe.
-- **Navigation:** `navigate(path)` and `currentPath()`.
+- **Navigation:** `navigate(path)`, `currentPath()`, and a route-change hook that calls `stop()`.
 - **Task catalogue and anchors.**
 - **Facts loaders:** the read-only API calls, the auth headers, and how to parse the
   domain's log or message format.
