@@ -9,7 +9,7 @@ source project (skycar, bin, job, ADG) appear only in the examples.
 
 ```js
 // guideTasks.js: the single source of truth for the search list and the runner.
-import { findVisible, isEnabled } from "./guideEngine";
+import { findVisible, isEnabled } from "./guideEngine.js";
 
 const g = (name) => `[data-guide="${name}"]`;
 
@@ -19,7 +19,7 @@ export const TASKS = [
     id: "cycle-stop",
     title: "Cycle stop the cube",
     description: "Let robots finish their current job, then stop",
-    icon: "mdi-stop-circle-outline",
+    icon: "stop-circle",          // whatever your icon set calls it
     page: "Operation",
     route: "/operation",
     keywords: ["cycle stop", "stop", "pause", "shutdown"],
@@ -62,51 +62,53 @@ summary.
 
 ---
 
-## §2 Engine (framework-agnostic)
+## §2 Engine
 
-The state is a plain object. Pass your framework's reactive wrapper so
-components re-render on mutation: `Vue.observable` (Vue 2), `reactive` (Vue 3).
-For React, use the identity function plus `subscribe` and `useSyncExternalStore`.
+Plain JS with no framework. State is an immutable snapshot replaced on every change,
+and listeners are notified, so any UI can bind to it: a store hook, a signal, a
+reactive ref you update in `subscribe`, or the vanilla overlay in §4.
 
 ```js
 // guideEngine.js
 const FIND_TIMEOUT_MS = 15000;
 const DONE_BANNER_MS = 2500;
 
-// UI adapter: the only library-specific knowledge. Vuetify 2 defaults shown.
+// UI adapter: the only component-library knowledge. Fill these in from the
+// app's own markup (inspect an open menu and dialog in devtools).
 export const ui = {
-  menuOpen: ".menuable__content__active",           // MUI: ".MuiPopover-root", Radix: "[data-radix-popper-content-wrapper]"
-  dialogOpen: ".v-dialog--active",                  // MUI: ".MuiDialog-root", Radix: "[role=dialog][data-state=open]"
-  fieldWrapper: (el) => (el.tagName === "INPUT" ? el.closest(".v-input") : null),
-  disabledClass: "v-btn--disabled",
-  // Attributes whose changes should re-check the step. Add your data-* state flags.
-  observedAttributes: ["class", "style", "disabled", "aria-pressed", "aria-expanded", "data-locked", "data-flow"],
+  menuOpen: "[role=listbox], [role=menu]",           // an open dropdown/popover list
+  dialogOpen: "[role=dialog][aria-modal=true]",      // an open modal (NOT the guide card)
+  // Libraries often put a passed-through attribute on the inner <input>;
+  // return the visible field wrapper to spotlight instead.
+  fieldWrapper: (el) => (el.tagName === "INPUT" ? el.closest("[data-field], .field") : null),
+  isDisabled: (el) => el.disabled || el.getAttribute("aria-disabled") === "true",
+  // Attribute changes that should re-check the step; add your data-* state flags.
+  observedAttributes: ["class", "style", "disabled", "aria-disabled", "aria-pressed", "aria-expanded",
+    "data-state", "data-locked", "data-flow"],
 };
 
-let reactive = (o) => o;
+let state = {
+  task: null, ctx: {}, stepIndex: 0,
+  // loading | waiting | active | lost | done | ended
+  status: "idle", targetEl: null, history: [], answers: [], endMessage: "",
+};
 const listeners = new Set();
-export let state;
-
-export function initGuide({ makeReactive, navigate, currentPath }) {
-  if (makeReactive) reactive = makeReactive;
-  nav = { navigate, currentPath };
-  state = reactive({
-    task: null, ctx: {}, stepIndex: 0,
-    // loading | waiting | active | lost | done | ended
-    status: "idle", targetEl: null, history: [], answers: [], endMessage: "",
-  });
-  return state;
-}
 let nav = { navigate: () => {}, currentPath: () => location.pathname };
 
+export function configureGuide({ navigate, currentPath, adapter } = {}) {
+  if (navigate) nav.navigate = navigate;
+  if (currentPath) nav.currentPath = currentPath;
+  if (adapter) Object.assign(ui, adapter);
+}
+export const getState = () => state;
 export function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }
-function set(patch) { Object.assign(state, patch); listeners.forEach((fn) => fn(state)); }
+function set(patch) { state = { ...state, ...patch }; listeners.forEach((fn) => fn(state)); }
 
 // ---- DOM queries --------------------------------------------------------
 export function isVisible(el) {
   if (!el || !el.isConnected) return false;
   const r = el.getBoundingClientRect();
-  if (r.width === 0 && r.height === 0) return false;           // closed dialogs, v-show
+  if (r.width === 0 && r.height === 0) return false;           // closed dialogs, hidden tabs
   const s = getComputedStyle(el);
   return s.visibility !== "hidden" && s.display !== "none";
 }
@@ -116,7 +118,7 @@ export function findVisible(selector) {
 }
 export function isEnabled(selector) {
   const el = findVisible(selector);
-  return !!el && !el.disabled && !el.classList.contains(ui.disabledClass);
+  return !!el && !ui.isDisabled(el);
 }
 const spotlightTarget = (el) => ui.fieldWrapper(el) || el;
 
@@ -126,8 +128,7 @@ let pollTimer = null, clickCleanup = null, checkQueued = false;
 let runToken = 0;
 let skippedIndex = -1;   // a step skipped as already done isn't one the user saw
 
-const step = () => (state.task ? state.task.steps[state.stepIndex] : null);
-export const currentStep = step;
+export const currentStep = () => (state.task ? state.task.steps[state.stepIndex] : null);
 const resolve = (v) => (typeof v === "function" ? v(state.ctx, state.targetEl) : v);
 const indexOf = (id) => {
   const i = state.task.steps.findIndex((s) => s.id === id);
@@ -193,6 +194,7 @@ async function runStep(index, { fromBack = false } = {}) {
     set({ status: "loading" });
     try { await s.load(state.ctx); } catch (e) { console.warn("[guide] facts failed", s.id, e); }
     if (token !== runToken || !state.task) return;   // user moved on while loading
+    set({ ctx: { ...state.ctx } });                  // new snapshot so bound UIs re-read facts
   }
 
   set({ status: "waiting" });
@@ -269,7 +271,7 @@ export function stop() {
   clearWatchers(); dropObserver(); clearTimeout(doneTimer); runToken++;
   set({ task: null, ctx: {}, stepIndex: 0, status: "idle", targetEl: null, history: [], answers: [], endMessage: "" });
 }
-export const next = () => { const s = step(); if (s) goNext(s, state.stepIndex); };
+export const next = () => { const s = currentStep(); if (s) goNext(s, state.stepIndex); };
 export const retry = () => runStep(state.stepIndex);
 
 function previousAt() {
@@ -287,7 +289,7 @@ export function back() {
 }
 
 export function choose(choice) {
-  const s = step();
+  const s = currentStep();
   if (!s || !s.ask) return;
   const sug = suggestedChoice();
   set({ answers: state.answers.filter((a) => a.stepId !== s.id).concat({
@@ -301,14 +303,14 @@ export function choose(choice) {
 }
 
 export const taskOwnsRoute = (path) => !!state.task && (state.task.routes || [state.task.route]).includes(path);
-export const stepText = () => (step() ? resolve(step().ask || step().text) : "");
-export const stepNote = () => (step() && step().note ? resolve(step().note) : "");
-export const stepChoices = () => (step() && step().ask ? step().choices : []);
-export const isManualStep = () => !!step() && !!(step().advance || {}).manual;
+export const stepText = () => (currentStep() ? resolve(currentStep().ask || currentStep().text) : "");
+export const stepNote = () => (currentStep() && currentStep().note ? resolve(currentStep().note) : "");
+export const stepChoices = () => (currentStep() && currentStep().ask ? currentStep().choices : []);
+export const isManualStep = () => !!currentStep() && !!(currentStep().advance || {}).manual;
 export const stepFacts = () =>
-  (step() && step().facts ? step().facts(state.ctx) || [] : []).filter((r) => r && r[1] != null);
+  (currentStep() && currentStep().facts ? currentStep().facts(state.ctx) || [] : []).filter((r) => r && r[1] != null);
 export function suggestedChoice() {
-  const s = step();
+  const s = currentStep();
   if (!s || !s.suggest) return null;
   const label = s.suggest(state.ctx);
   return (s.choices || []).find((c) => c.label === label) || null;
@@ -326,22 +328,20 @@ export function caseSummary({ header = (task) => task.title, matchedTag = "match
 }
 ```
 
-**Wiring (Vue 2 + vue-router 3):**
+**Wiring:** call this once at app start with the app's router, and let the
+router's change event end the guide when the user leaves the task's pages.
 
 ```js
-import Vue from "vue";
-import { initGuide } from "./guide/guideEngine";
-initGuide({
-  makeReactive: Vue.observable,
-  navigate: (path) => router.push(path).catch(() => {}),   // swallow NavigationDuplicated
-  currentPath: () => router.currentRoute.path,
+configureGuide({
+  navigate: (path) => router.navigate(path),          // whatever the router exposes
+  currentPath: () => router.currentPath(),
+  adapter: { dialogOpen: ".my-lib-dialog--open" },     // only what differs from the defaults
 });
+router.onChange((path) => { if (getState().task && !taskOwnsRoute(path)) stop(); });
 ```
 
-React: `initGuide({ navigate, currentPath })`, then
-`const s = useSyncExternalStore(subscribe, () => ({ ...state }))`. Snapshot
-identity must change on each update, so keep a version counter, or return a
-fresh object only from `set`.
+A UI that renders the card itself binds to `subscribe` / `getState`. Snapshot
+identity changes on every update, which is what store hooks expect.
 
 ---
 
@@ -412,123 +412,241 @@ operations, and mixing them up was a real bug.
 
 ---
 
+---
+
 ## §4 Spotlight overlay
 
-The geometry and tracking are framework-agnostic. The Vue 2 component below is the
-proven shape; port its template to JSX for React.
+Plain DOM, mounted once at app start (`mountSpotlight()`), which works beside any
+framework because it owns its own nodes on `document.body`. If the app prefers
+the card as a native component, keep the same rules and port `render` and `tick`.
 
-**Rules:**
-- **Layer:** a fixed full-screen layer at z-index above modals (≥1000) with
+**Rules (whatever renders it):**
+- **Layer:** a fixed full-screen layer above modals (z-index ≥ 1000) with
   `pointer-events: none`. Only the card takes pointer events.
-- **Dim:** a hole around the target: `box-shadow: 0 0 0 200vmax rgba(...)` on a div sized to the
-  target rect plus padding. One element, and no click blocking.
-- **Ring:** a pulsing outline on a second div with the same rect.
-- **Tracking:** `requestAnimationFrame` loop. Read `getBoundingClientRect()` on the
-  target and write the rect only when it changed. Every frame also compute:
-  - `menuOpen = !!querySelector(ui.menuOpen)`: hide the dim **and** the card.
-  - `blocked = target && dialogOpen && !target.closest(ui.dialogOpen)`: render the
-    compact corner card ("Close the open window first").
-  - `pulse++` every ~15 frames: recompute `note` (live value checks).
-- **Card placement:** below the target if it fits, else above, else pinned
-  to the bottom of the viewport (for targets taller than the screen). Clamp horizontally to
-  16 px. `step.dock` pins it to the right edge; with no target it docks at bottom centre.
-- **Card content by status:**
+- **Dim:** a hole around the target: `box-shadow: 0 0 0 200vmax rgba(...)` on a box
+  sized to the target rect plus padding. One element, and it blocks no clicks.
+- **Ring:** a pulsing outline on a second box with the same rect.
+- **Tracking:** a `requestAnimationFrame` loop. Read the target's rect and write it only on
+  change. Every frame also compute:
+  - `menuOpen`: hide the dim **and** the card. A dropdown opens under the
+    layer, and the card would cover its options.
+  - `blocked = dialogOpen && !target.closest(dialog)`: shrink the card to a
+    corner note ("Close the open window first"). Otherwise it sits on that
+    dialog's own Close button.
+  - a pulse about 4×/s: re-check so a `note` that reads a typed value stays live.
+    Rebuild the card only when its content changed, or clicks get swallowed.
+- **Placement:** below the target if it fits, else above, else pinned to the
+  viewport bottom (targets taller than the screen). Clamp 16 px from the edges.
+  `step.dock` pins the card to the right edge; with no target it docks at bottom centre.
+- **Card by status:**
 
   | status | card shows |
   |---|---|
-  | `loading` | spinner + "Reading data…" |
-  | `waiting` | spinner + step text |
-  | `active` | text, facts `<dl>`, note, choices (suggested one tagged), "The guide won't press this for you" on `final` |
+  | `loading` | "Reading data…" |
+  | `waiting` | step text with a spinner |
+  | `active` | text, facts, note, choices (suggested one tagged), and "won't press this" on `final` |
   | `lost` | "Can't find the next control…" + Try again |
-  | `done` / `ended` | reason + `<pre>` case summary + Copy summary + Close |
+  | `done` / `ended` | reason + case summary + Copy summary + Close |
 - **Footer:** Back (when `canGoBack()`), Exit (Esc), Next (manual steps).
-- **Esc:** a capture-phase keydown that ignores Esc while `ui.menuOpen` or `ui.dialogOpen` is open.
-- **Route watcher:** `if (state.task && !taskOwnsRoute(to.path)) stop()`.
-- **Step label:** "Step N of M" for linear tasks; "Step {history.length+1}" when any step `ask`s.
-- **Type:** ≥14 px. A support audience rejected 11–13 px.
+- **Esc:** a capture-phase listener that ignores Esc while a menu or dialog is open,
+  because Esc belongs to the topmost thing.
+- **"Open" means visible.** Test the menu and dialog selectors with `findVisible`, not
+  `querySelector`: closed dialogs often stay mounted, and would make every step look blocked.
+- **Step label:** "Step N of M" for linear tasks; "Step {history.length + 1}" when any step asks.
+- **Type:** ≥ 14 px. A support audience rejected 11–13 px.
 
-```vue
-<template>
-  <div v-if="s.task" class="guide-layer">
-    <div v-if="rect && !menuOpen" class="guide-spotlight" :style="box" />
-    <div v-if="rect" class="guide-ring" :style="box" />
-    <div ref="card" class="guide-card" :style="side || compact ? {} : cardStyle"
-         :class="{ 'is-docked': !rect && !side && !compact, 'is-side': side && !compact,
-                   'is-compact': compact, 'is-hidden': menuOpen }" role="dialog" aria-live="polite">
-      <header><span class="title">{{ s.task.title }}</span><span v-if="!finished" class="count">{{ count }}</span></header>
-      <p v-if="compact" class="warn">Close the open window first: it's covering this.</p>
-      <template v-else>
-        <p>{{ bodyText }}</p>
-        <dl v-if="!finished && facts.length" class="facts">
-          <template v-for="r in facts"><dt :key="r[0]+'k'">{{ r[0] }}</dt><dd :key="r[0]+'v'" :class="r[2]">{{ r[1] }}</dd></template>
-        </dl>
-        <p v-if="!finished && note" class="warn">{{ note }}</p>
-        <div v-if="s.status === 'active' && choices.length" class="choices">
-          <button v-for="c in choices" :key="c.label" type="button" @click="choose(c)"
-                  :class="{ suggested: suggested && suggested.label === c.label }">
-            {{ c.label }}<span v-if="suggested && suggested.label === c.label" class="tag">Matches data</span>
-          </button>
-        </div>
-        <p v-if="isFinal && s.status === 'active'" class="muted">The guide won't press this for you.</p>
-        <pre v-if="finished && summary" class="summary">{{ summary }}</pre>
-        <footer><!-- Back / Try again / Exit / Next, or Copy summary / Close when finished --></footer>
-      </template>
-    </div>
-  </div>
-</template>
+```js
+// spotlight.js
+import * as G from "./guideEngine.js";
+
+const PAD = 6, GAP = 14;
+const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+
+export function mountSpotlight({ matchedLabel = "Matches data", loadingText = "Reading data…" } = {}) {
+  const layer = el("div", "guide-layer"), dim = el("div", "guide-spotlight"), ring = el("div", "guide-ring");
+  const card = el("div", "guide-card");
+  card.setAttribute("role", "dialog"); card.setAttribute("aria-live", "polite");
+  layer.append(dim, ring, card);
+  document.body.append(layer);
+
+  let rect = null, menuOpen = false, blocked = false, frame = 0, copied = false, lastKey = "";
+
+  function render() {
+    const s = G.getState();
+    layer.hidden = !s.task;
+    if (!s.task) { lastKey = ""; return; }
+    const step = G.currentStep();
+    const finished = s.status === "done" || s.status === "ended";
+    const compact = blocked && s.status === "active";
+    const side = !finished && !compact && step && step.dock;
+
+    dim.hidden = !rect || menuOpen; ring.hidden = !rect;
+    // Rebuild only when what's shown changes: replacing nodes on every pulse
+    // would swallow a click that lands between mousedown and mouseup.
+    const key = JSON.stringify([s.status, s.stepIndex, s.history.length, s.endMessage, G.stepText(), G.stepFacts(),
+      G.stepNote(), (G.suggestedChoice() || {}).label, compact, side, menuOpen, !!rect, copied]);
+    if (key === lastKey) return place();
+    lastKey = key;
+    card.className = "guide-card" + (menuOpen ? " is-hidden" : "") + (compact ? " is-compact" : "")
+      + (side ? " is-side" : "") + (!rect && !side && !compact ? " is-docked" : "");
+    card.replaceChildren();
+
+    const head = el("header");
+    head.append(el("span", "title", s.task.title));
+    if (!finished) {
+      const branching = s.task.steps.some((x) => x.ask);
+      head.append(el("span", "count", branching ? `Step ${s.history.length + 1}` : `Step ${s.stepIndex + 1} of ${s.task.steps.length}`));
+    }
+    card.append(head);
+
+    if (compact) { card.append(el("p", "warn", "Close the open window first: it's covering this.")); return place(); }
+
+    const body = {
+      done: "Done. That's the whole task.", ended: s.endMessage, loading: loadingText,
+      lost: "Can't find the next control. Did the previous step finish? Go back, or try again.",
+    }[s.status] ?? G.stepText();
+    card.append(el("p", s.status === "waiting" ? "text is-waiting" : "text", body));
+
+    if (!finished) {
+      const facts = G.stepFacts();
+      if (facts.length) {
+        const dl = el("dl", "facts");
+        for (const [k, v, tone] of facts) dl.append(el("dt", null, k), el("dd", tone || null, String(v)));
+        card.append(dl);
+      }
+      const note = G.stepNote();
+      if (note) card.append(el("p", "warn", note));
+    }
+    if (s.status === "active") {
+      const sug = G.suggestedChoice();
+      const choices = G.stepChoices() || [];
+      if (choices.length) {
+        const box = el("div", "choices");
+        for (const c of choices) {
+          const b = el("button", sug && sug.label === c.label ? "choice suggested" : "choice", c.label);
+          b.type = "button";
+          if (sug && sug.label === c.label) b.append(el("span", "tag", matchedLabel));
+          b.onclick = () => G.choose(c);
+          box.append(b);
+        }
+        card.append(box);
+      }
+      if (step && step.final) card.append(el("p", "muted", "The guide won't press this for you."));
+    }
+
+    const foot = el("footer");
+    const btn = (label, fn, cls = "btn") => { const b = el("button", cls, label); b.type = "button"; b.onclick = fn; return b; };
+    if (!finished) {
+      if (G.canGoBack()) foot.append(btn("Back", G.back));
+      if (s.status === "lost") foot.append(btn("Try again", G.retry));
+      foot.append(el("span", "spacer"), btn("Exit (Esc)", G.stop));
+      if (s.status === "active" && G.isManualStep()) foot.append(btn("Next", G.next, "btn primary"));
+    } else if (s.task.summary) {
+      const summary = G.caseSummary();
+      card.append(el("pre", "summary", summary));
+      if (s.status === "ended" && G.canGoBack()) foot.append(btn("Back", G.back));
+      foot.append(el("span", "spacer"), btn(copied ? "Copied" : "Copy summary", async () => {
+        try { await navigator.clipboard.writeText(summary); copied = true; render(); setTimeout(() => { copied = false; render(); }, 1500); }
+        catch (e) { console.warn("[guide] copy failed", e); }
+      }), btn("Close", G.stop, "btn primary"));
+    }
+    card.append(foot);
+    place();
+  }
+
+  function place() {
+    for (const n of [dim, ring]) if (rect) Object.assign(n.style, {
+      top: `${rect.top - PAD}px`, left: `${rect.left - PAD}px`,
+      width: `${rect.width + PAD * 2}px`, height: `${rect.height + PAD * 2}px` });
+    if (!rect || /is-(side|compact|docked)/.test(card.className)) { card.style.top = card.style.left = ""; return; }
+    const vw = innerWidth, vh = innerHeight, h = card.offsetHeight, w = card.offsetWidth;
+    let top = rect.bottom + PAD + GAP;
+    if (top + h > vh - 16) { top = rect.top - PAD - GAP - h; if (top < 16) top = vh - h - 16; }
+    card.style.top = `${top}px`;
+    card.style.left = `${Math.max(16, Math.min(rect.left, vw - w - 16))}px`;
+  }
+
+  function tick() {
+    const s = G.getState();
+    if (s.task) {
+      const t = s.targetEl && s.targetEl.isConnected ? s.targetEl.getBoundingClientRect() : null;
+      const moved = !!t !== !!rect || (t && (t.top !== rect.top || t.left !== rect.left || t.width !== rect.width || t.height !== rect.height));
+      // Visible, not just present: closed dialogs and menus often stay in the DOM.
+      const m = !!G.findVisible(G.ui.menuOpen);
+      const d = G.findVisible(G.ui.dialogOpen);
+      const b = !!s.targetEl && !!d && !s.targetEl.closest(G.ui.dialogOpen);
+      if (moved) rect = t && { top: t.top, left: t.left, width: t.width, height: t.height, bottom: t.bottom };
+      if (moved || m !== menuOpen || b !== blocked || ++frame % 15 === 0) { menuOpen = m; blocked = b; render(); }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || !G.getState().task) return;
+    if (G.findVisible(`${G.ui.menuOpen}, ${G.ui.dialogOpen}`)) return;
+    G.stop();
+  }, true);
+  G.subscribe(render);
+  render();
+  requestAnimationFrame(tick);
+}
 ```
 
 ```css
 .guide-layer { position: fixed; inset: 0; z-index: 1000; pointer-events: none; }
+.guide-layer[hidden], .guide-layer [hidden] { display: none; }
 .guide-spotlight { position: fixed; border-radius: 10px; box-shadow: 0 0 0 200vmax rgba(5,10,20,.55);
   transition: top .15s, left .15s, width .15s, height .15s; }
-.guide-ring { position: fixed; border-radius: 10px; border: 2px solid #38bdf8; animation: pulse 1.6s ease-out infinite; }
-@keyframes pulse { from { box-shadow: 0 0 0 0 rgba(56,189,248,.6) } to { box-shadow: 0 0 0 14px rgba(56,189,248,0) } }
-.guide-card { position: fixed; z-index: 1001; pointer-events: auto; font-size: 15px; transition: opacity .12s; }
+.guide-ring { position: fixed; border-radius: 10px; border: 2px solid #38bdf8; animation: guide-pulse 1.6s ease-out infinite; }
+@keyframes guide-pulse { from { box-shadow: 0 0 0 0 rgba(56,189,248,.6) } to { box-shadow: 0 0 0 14px rgba(56,189,248,0) } }
+.guide-card { position: fixed; z-index: 1001; pointer-events: auto; width: min(380px, calc(100vw - 32px));
+  padding: 14px 16px 12px; border-radius: 12px; font-size: 15px; line-height: 1.45;
+  background: #10161f; color: #e5e7eb; border: 1px solid #1e3a5f; transition: opacity .12s; }
 .guide-card.is-hidden { opacity: 0; pointer-events: none; }
 .guide-card.is-side { right: 16px; top: 80px; width: min(400px, calc(100vw - 32px)); max-height: calc(100vh - 100px); overflow-y: auto; }
 .guide-card.is-compact { right: 16px; bottom: 16px; width: min(320px, calc(100vw - 32px)); }
-.guide-card.is-docked { left: 50%; bottom: 24px; transform: translateX(-50%); width: min(380px, calc(100vw - 32px)); }
+.guide-card.is-docked { left: 50%; bottom: 24px; transform: translateX(-50%); }
+.guide-card header { display: flex; gap: 8px; font-weight: 600; } .guide-card .count { margin-left: auto; color: #94a3b8; font-weight: 400; }
+.guide-card .facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: 14px; }
+.guide-card .facts .good { color: #86efac } .guide-card .facts .bad { color: #fca5a5 } .guide-card .facts .warn, .guide-card .warn { color: #fcd34d }
+.guide-card .choices { display: grid; gap: 6px; margin-top: 12px; }
+.guide-card .choice { text-align: left; padding: 8px 12px; border-radius: 8px; border: 1px solid #334155; background: #111a26; color: inherit; }
+.guide-card .choice.suggested { border-color: #38bdf8; }
+.guide-card .summary { white-space: pre-wrap; max-height: 220px; overflow: auto; font-size: 13px; }
+.guide-card footer { display: flex; gap: 8px; margin-top: 12px; } .guide-card .spacer { flex: 1; }
 @media (prefers-reduced-motion: reduce) { .guide-ring { animation: none; } }
 ```
-
-Keep the compact warning **outside** the `v-else` / `!compact` block. In the
-source it was first nested inside it and so never rendered.
 
 ---
 
 ## §5 Search box
 
-**Vue 2 + Vuetify (`v-autocomplete`):**
-- `:items` comes from `searchTasks(TASKS, query)`; set `no-filter`, `return-object`, and `:search-input.sync="query"`.
-- Item slot: icon, title, a param chip ("skycar 12"), "+ id no." when `needsParam`
-  is unmet, a description, and a page chip.
-- Global `keydown`: Ctrl/Cmd+K → `preventDefault()`, then `this.$refs.search.$refs.input.focus()`.
-  A focus-trapping modal blocks this; that is acceptable, so say so in the docs.
-- `@change(item)` runs one of two paths:
+Use whatever combobox or autocomplete the app already has. The box must:
+
+- take its list from `searchTasks(TASKS, query)` (§3) with the component's own
+  filtering **off**, so the scored order is kept;
+- render per item: icon, title, a param chip ("record 12"), "+ id no." when
+  `needsParam` is unmet, a one-line description, and a page chip;
+- open on Ctrl/Cmd+K: a global `keydown` that calls `preventDefault()` and
+  focuses the input. A focus-trapping modal will block it, which is acceptable;
+- on pick, run one of two paths:
 
 ```js
-onPick(item) {
-  if (!item) return;
-  const task = TASKS.find((t) => t.id === item.key);
+function onPick(item, { clearSelection, setQuery, focusInput, openList }) {
+  const task = TASKS.find((t) => t.id === item.id);
   if (task.needsParam && item.ctx[task.param] === undefined) {
-    // Vuetify resets the search text after a selection: clear the model, then
-    // prefill on a timer ($nextTick loses the race).
-    this.selected = null;
-    setTimeout(() => {
-      this.query = `${task.title.toLowerCase()} `;
-      this.$refs.search.$refs.input.focus();
-      this.$refs.search.activateMenu();
-    }, 100);
+    // Many comboboxes reset their text after a selection. Clear the selection
+    // first, then prefill on a timer: a same-tick or next-tick write loses the race.
+    clearSelection();
+    setTimeout(() => { setQuery(`${task.title.toLowerCase()} `); focusInput(); openList(); }, 100);
     return;
   }
-  this.$nextTick(() => { this.selected = null; this.query = ""; this.$refs.search.blur(); });
+  clearSelection(); setQuery("");
   start(task, item.ctx);
 }
 ```
 
-Elsewhere, use any combobox (cmdk, Headless UI, Downshift) with the same scoring.
-Mount the box in the app bar and hide it below phone width if the bar is crowded.
+Mount it in the app bar. Below phone width, hide it or collapse it to an icon.
 
 ---
 
@@ -582,8 +700,8 @@ export function latest(messages, letters, forRecord) {
 }
 ```
 
-Tag rows in the log table with the parsed id (e.g. `item-class` returns
-`guide-msg-${id}`), so the step targets exactly `.guide-msg-<id>`.
+Tag rows in the log table with the parsed id (the table's row-class or
+row-props hook returns `guide-msg-${id}`), so the step targets exactly `.guide-msg-<id>`.
 
 **Evidence chain.** One `ask` per check, ordered cheapest first, each with an
 `end` for every "don't":
@@ -620,6 +738,8 @@ or to `manual` when the component unlocks its fields (`data-locked="false"`).
 
 ---
 
+---
+
 ## §7 Verification: mock backend + Playwright proof
 
 **Mock backend** (Python `aiohttp` + `python-socketio` in a throwaway venv):
@@ -632,24 +752,26 @@ or to `manual` when the component unlocks its fields (`data-locked="false"`).
 - Record every non-GET request in `/__writes`; the test asserts there are no flag or confirm writes.
 - `cors` middleware for non-socket paths; `sio.attach(app)`; a catch-all route records
   unmocked paths so missing shapes surface.
-- Point the dev build at it: `VUE_APP_*`/`VITE_*` API and socket URLs → the mock port.
+- Point the dev build at it: the app's API and socket base URLs (env vars) → the mock port.
 
 **Playwright walk** (one script per task and per branch):
 
 ```python
+WRAPPER = "[data-field], .field"       # same as ui.fieldWrapper
+
 def ring_on(page, selector):          # is the pulsing ring around this element?
     return page.evaluate("""(sel) => { const ring = document.querySelector('.guide-ring');
       if (!ring) return false; const r = ring.getBoundingClientRect();
       return [...document.querySelectorAll(sel)].some(el => {
-        const t = el.tagName === 'INPUT' ? (el.closest('.v-input') || el) : el;
+        const t = el.tagName === 'INPUT' ? (el.closest(WRAPPER) || el) : el;
         const b = t.getBoundingClientRect();
-        return b.width && Math.abs(b.left - 6 - r.left) < 3 && Math.abs(b.top - 6 - r.top) < 3; }); }""", selector)
+        return b.width && Math.abs(b.left - 6 - r.left) < 3 && Math.abs(b.top - 6 - r.top) < 3; }); }""".replace("WRAPPER", repr(WRAPPER)), selector)
 ```
 
 - Per step: screenshot, card text, suggested choice, and `ring_on(expected)`.
   The test acts like a user: it clicks the real control, then asserts the next anchor.
 - Click with `>> visible=true`, because hidden duplicates (closed tabs/dialogs) resolve first.
-  For a 0-px combobox input, click its `.v-input` wrapper.
+  For a 0-px combobox input, click its field wrapper.
 - Close the app's own popups the way a user would. They are part of the real flow,
   and the guide must cope with them.
 - Fresh page per run: a leftover focus-trapping dialog blocks Ctrl+K.
