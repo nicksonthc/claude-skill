@@ -20,6 +20,7 @@ skill here immediately changes the skill Claude Code loads.
 | [`toast-notification-history`](skills/toast-notification-history/) | Toasts with an audit trail: drop-in sonner wrapper that mirrors every toast into a capped localStorage history with the acting user stamped on, shown in a floating-bell slide-over with unread badge. |
 | [`bilingual-copy-store`](skills/bilingual-copy-store/) | Two-language (or N-language) UI with one shared copy dictionary, a Zustand-backed toggle that persists and stays in sync across every page of a multi-entry app, typed keys for dynamic/status text, and a safe overlay for translating strings that live in generator-owned JSON. |
 | [`image-to-3d-blender`](skills/image-to-3d-blender/) | Reference image → GLB with headless Blender: silhouette extrusion for flat/transparent images, or reference-guided procedural studies (buildings, boats, trees, figures) via a shared `studio.py` helper library, with transparent preview, .blend and manifest entry. |
+| [`smart-task-guide`](skills/smart-task-guide/) | In-app smart guide: Ctrl+K task search that navigates and spotlights each control until the user presses the final button, plus branching troubleshooting runbooks that read backend data read-only, suggest answers, stop with a reason and leave a copyable case summary; mock-backend + Playwright proof recipe. |
 
 The R3F skills compose: `guided-placement` delegates camera framing to
 `r3f-hero-camera` and layers onto `interactive-3d-object`'s hover/select base;
