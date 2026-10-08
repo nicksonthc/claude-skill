@@ -124,6 +124,12 @@ user's own hands do every step.
   for each shape the facts layer uses. A typical example is an HTTP 200 with
   `data: []`, where the result arrives later over a socket. Write the mock from
   the backend source, not from the frontend's guesses.
+- **Batch targets.** When a panel sends to every selected item, expose the
+  selection as a `data-*` attribute. The step advances only when exactly the
+  intended item is selected, and otherwise points at the extra one to deselect.
+- **Move it for real, then record it.** When a flow both moves something
+  physically and records it in the system, record last. A failure midway then
+  leaves the record still true, and every "stop" message can say so.
 - **Domain model drift.** Ask what is still true before modelling options the
   UI still carries. In the source project a whole "winch side A/B" step had to
   be removed once it turned out every robot now carries one bin.
