@@ -124,6 +124,10 @@ user's own hands do every step.
   for each shape the facts layer uses. A typical example is an HTTP 200 with
   `data: []`, where the result arrives later over a socket. Write the mock from
   the backend source, not from the frontend's guesses.
+- **Pick the row, then point at it.** For an action in a list (one button per
+  record), ask "which record?" first, listing only those whose state allows the
+  action, then spotlight that row's button alone. Place the card *beside* it:
+  below it, the card covers the same button on the next rows.
 - **Batch targets.** When a panel sends to every selected item, expose the
   selection as a `data-*` attribute. The step advances only when exactly the
   intended item is selected, and otherwise points at the extra one to deselect.
