@@ -1,0 +1,68 @@
+name: Agent PR proof
+
+# groomed/* fix PRs only: the PR's new or changed tests must FAIL against the base branch code (no fix), so a test that
+# passes either way cannot prove the defect. The job name is the profile's `ci.proof`. Adapt the env block and the
+# "project setup" steps to this repo's test runner.
+on:
+  pull_request:
+    branches: [ "main" ]   # the integration branch
+
+jobs:
+  proves-defect:
+    name: Prove new tests fail without the fix
+    if: startsWith(github.head_ref, 'groomed/')
+    runs-on: ubuntu-latest
+    env:
+      # git pathspecs of test files; git's `*` also crosses directories
+      TEST_PATHSPECS: "tests/*test_*.py"
+      # the runner; the changed test files are appended
+      TEST_CMD: "python -m pytest -q"
+      # exit codes that mean "the tests failed": pytest 1 (failures) and 2 (collection error, e.g. a symbol the fix adds
+      # is missing on base); jest and vitest use 1; 0 means the tests pass without the fix and prove nothing
+      PROOF_EXIT_CODES: "1 2"
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # --- project setup: runtime, services and dependencies, copied from the repo's test workflow ---
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: List the PR's added or changed tests
+        run: |
+          set -f   # keep the pathspecs away from shell globbing
+          git diff --name-only --diff-filter=AM "origin/${{ github.base_ref }}...HEAD" -- $TEST_PATHSPECS | sort -u > /tmp/changed_tests.txt
+          cat /tmp/changed_tests.txt
+          if [ ! -s /tmp/changed_tests.txt ]; then
+            echo "::error::a groomed/* fix PR must add or change at least one test file"
+            exit 1
+          fi
+
+      - name: Put the base code back, keep the PR's tests
+        run: |
+          HEAD_SHA=$(git rev-parse HEAD)
+          git checkout -q --detach "origin/${{ github.base_ref }}"
+          git checkout "$HEAD_SHA" -- $(cat /tmp/changed_tests.txt)
+
+      # --- project setup: install dependencies (after the checkout above, so the base code's manifests are used) ---
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: The PR's tests must fail on the base code
+        run: |
+          set +e
+          $TEST_CMD $(cat /tmp/changed_tests.txt)
+          rc=$?
+          for ok in $PROOF_EXIT_CODES; do
+            if [ "$rc" -eq "$ok" ]; then
+              echo "OK: the tests fail without the fix (exit $rc), so they prove the defect."
+              exit 0
+            fi
+          done
+          echo "::error::exit $rc. 0 means the tests pass WITHOUT the fix and do not prove the defect; any other code means no usable tests ran."
+          exit 1

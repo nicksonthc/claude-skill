@@ -1,0 +1,29 @@
+# Fixture: a Python service with a release branch, CI, risk paths and every routine active.
+version: 1
+project: {repo: acme/orders-api, environment_id: env_fixture, description: "Python 3.12 FastAPI order service"}
+branches: {integration: release, production: master}
+hub: {issue: 42, marker: "<!-- ORDERS-AUDIT-MASTER -->", legacy_markers: ["<!-- OLD-AUDIT -->"]}
+approvers: [alice]
+wip: {limit: 5, prefixes: [groomed/]}
+orient: {read_first: [CLAUDE.md], invariants: docs/invariants.md}
+components:
+  - {name: app, paths: ["**"], tests: ["tests/**/test_*.py"], fixtures: tests/conftest.py,
+     static: ["pip install -q black==25.1.0", "black --check ."],
+     collect: "python -m pytest --collect-only -q {files}"}
+ci: {required: [test], proof: "Prove new tests fail without the fix", manual: ["Regression Test"], missing_after_hours: 6}
+risk: {t2: ["app/payments/**", ".claude/**"], t2_tests: [tests/scenarios/]}
+guards: [{skill: payments-guard, when: "any refund or capture path"}]
+extra_rules: ["A captured payment is never cancelled."]
+routines:
+  - {key: audit, prompt: local/audit.md, id: trig_a, status: active, cron: "0 22 * * 0", model: claude-opus-5-5,
+     sources: [acme/orders-api, acme/orders-web]}
+  - {key: backlog-groom, role: backlog-groom, id: trig_b, status: active, cron: "30 23 * * 0-4", model: claude-opus-5-5}
+  - {key: gated-implementer, role: gated-implementer, id: trig_c, status: active, cron: "0 1,4,7 * * 1-5",
+     model: claude-opus-5-5, attribution: [{head: "groomed/*", base: release}]}
+  - {key: pr-evaluator, role: pr-evaluator, id: trig_d, status: active, cron: "0 2,5,8 * * *", model: claude-opus-5-5}
+  - {key: redo-executor, role: redo-executor, id: trig_e, status: active, cron: "0 1 * * *", model: claude-opus-5-5}
+  - {key: release-manager, role: release-manager, id: trig_f, status: active, cron: "0 0 * * 1-5",
+     model: claude-sonnet-5-5, attribution: [{head: release, base: master}], score_revisions: false}
+  - {key: scorecard, role: scorecard, id: trig_g, status: active, cron: "30 1 * * 1", model: claude-sonnet-5-5}
+removed:
+  - {key: old-bot, id: trig_z, removed: 2026-09-28, reason: "replaced", attribution: [{head: "bot/*", base: "*"}]}
