@@ -229,7 +229,10 @@ def main() -> None:
     ]
     claimed: set[int] = set()
     entries = [(r, r["key"]) for r in profile.get("routines") or []]
-    entries += [(r, r["key"] if r["key"].endswith("(removed)") else f"{r['key']} (removed)") for r in profile.get("removed") or []]
+    entries += [
+        (r, r["key"] if r["key"].endswith("(removed)") else f"{r['key']} (removed)")
+        for r in profile.get("removed") or []
+    ]
     for routine, label in entries:
         rules = routine.get("attribution") or []
         if not rules:

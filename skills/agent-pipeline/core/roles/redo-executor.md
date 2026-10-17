@@ -44,7 +44,8 @@ The **brief** is the whole request comment: the feedback above the `#redo` line 
 - Load the skills in `{guards}` whose `when` applies, and read the decision record covering the code you touch.
 
 ## Step 4: Check honestly
-- Run the `static` commands of each component you touched, and its `collect` command on any changed test files.
+- Run the `static` commands of each component you touched, and its `collect` command on any changed test files. In
+  both, replace `{files}` with the files you changed.
 - Run no tests (`core/shared.md`); CI runs them on your push.
 - In your reply, state plainly which checks ran and which passed.
 - If the change is clearly broken, or you cannot make it coherent, push nothing. Reply with `status=blocked` and say

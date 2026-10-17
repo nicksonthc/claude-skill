@@ -34,7 +34,9 @@ For the moving parts, see `core/README.md`. For the RemoteTrigger body, the hook
    extra rules, and which routines to enable.
 3. **Write the profile.** Start `.claude/routines/pipeline.yml` from `templates/pipeline.yml`.
    - Add one `components[]` entry per testable package.
+   - Scope each `static` command to `{files}` (the files a routine changed), at the repo's pinned versions.
    - Leave `ci` out when there is no test CI. Then only the audit, groom and scorecard can be enabled.
+   - If the repo's CI or hooks run a formatter over the whole repo, exclude `.claude/routines/core/` from it.
 4. **Vendor the core.** `rsync -a --delete <skill>/core/ <repo>/.claude/routines/core/`.
 5. **Hooks** (`REFERENCE.md` §2).
    - Register `push-guard.py`, and the cloud-only `require-ai-marker.sh`, in `.claude/settings.json`.
@@ -106,3 +108,5 @@ The update is done when, after the merge, the repo's core tree hash equals upstr
 - RemoteTrigger `list` returns only the first page, and the API cannot delete a routine; use the console.
 - New triggers inherit the account's default connectors.
 - PyYAML can be missing from the cloud image. Launchers don't need it, and the scorecard installs it.
+- Whole-repo format checks are often already red (micron-be: black wants 16 files reformatted). A gate on
+  `black --check .` can never pass, so scope `static` to `{files}`.
