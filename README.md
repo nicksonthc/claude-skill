@@ -22,11 +22,24 @@ skill here immediately changes the skill Claude Code loads.
 | [`image-to-3d-blender`](skills/image-to-3d-blender/) | Reference image → GLB with headless Blender: silhouette extrusion for flat/transparent images, or reference-guided procedural studies (buildings, boats, trees, figures) via a shared `studio.py` helper library, with transparent preview, .blend and manifest entry. |
 | [`smart-task-guide`](skills/smart-task-guide/) | In-app smart guide: Ctrl+K task search that navigates and spotlights each control until the user presses the final button, plus branching troubleshooting runbooks that read backend data read-only, suggest answers, stop with a reason and leave a copyable case summary; mock-backend + Playwright proof recipe. |
 | [`agent-pipeline`](skills/agent-pipeline/) | Scheduled Claude Code cloud routines for any repo — audit → groom → gated implement → evaluate → `#redo` → release PR → weekly scorecard — run from one vendored generic core plus a per-repo `pipeline.yml` profile; install, sync, update-core and drift workflows, REST-only GitHub access, and cloud-only push-guard and AI-marker hooks. |
+| [`guided-product-tour`](skills/guided-product-tour/) | Chaptered, role-filtered product tour for a React app: a spotlight card over the real screens that navigates and opens the menus and dialogs it points at, per-terminal progress ticks, first-run auto-start, and a hands-on sandbox finale built from the app's real components. |
+| [`ui-motion-system`](skills/ui-motion-system/) | Motion and feedback for dashboards and kiosks: one token set and CSS-only utilities, skeletons instead of blank or zeroed screens, arrival flashes for live rows, tweened counters, confirmation pops, tilt/lift touch cards, a toast countdown bar, and a reduced-motion mode that keeps outlines. |
+| [`console-app-shell`](skills/console-app-shell/) | Shell for a multi-role internal app or shared kiosk: one nav registry behind a role-filtered sidebar, per-terminal page reordering, collapsible groups, registry-fed hub pages, a hover-intent account menu, and settings split into validated line-wide server settings and per-terminal preferences. |
+| [`replayable-audit-trail`](skills/replayable-audit-trail/) | Append-only audit events staged in the same transaction with name-based payloads, so a restore script can replay a wiped record onto reseeded reference data; deletions that take a reason and a snapshot, and a Deletion log read back from the trail. |
+| [`request-error-logging`](skills/request-error-logging/) | Database-backed access and error logging for FastAPI that can never break a request: a 500 guard, handlers that log and answer unchanged, user attribution from the bearer token, a noise gate for polling GETs, and an admin System Log page. |
 
 The R3F skills compose: `guided-placement` delegates camera framing to
 `r3f-hero-camera` and layers onto `interactive-3d-object`'s hover/select base;
 `r3f-scene-world` builds the world those three act in, and hands its GLB
 authoring to `image-to-3d-blender`. Each also stands alone.
+
+The shop-floor app skills compose the same way: `console-app-shell` hosts the
+rest — the `system-status-popover` dot in its status row, the
+`toast-notification-history` bell, `keyboard-first-hotkeys`, the
+`guided-product-tour` action in its Guide group, and the admin pages of
+`request-error-logging` and `replayable-audit-trail` in its management hub.
+`ui-motion-system` is the motion vocabulary they share, and
+`socketio-realtime-hooks` feeds their live data. Each also stands alone.
 
 ## Install
 
