@@ -1,6 +1,6 @@
 ---
 name: smart-task-guide
-description: In-app smart guide for a web dashboard. A "What do you want to do?" search box (Ctrl+K) lists tasks; picking one navigates to the right page and spotlights each control in turn until the user presses the final button themselves. Troubleshooting runbooks branch on evidence: the guide reads backend data read-only, suggests answers, stops with a reason when the evidence says "don't", and leaves a copyable case summary. Use when users can't find where an action lives ("how do I add X", "guide the user to the button"), when building an onboarding tour, product walkthrough, spotlight/coach-mark or highlight-the-button feature, or when turning a support SOP or runbook (diagnose, then fix) into a guided flow inside the app.
+description: In-app smart guide for a web dashboard. A "What do you want to do?" search box (Ctrl+K) lists tasks; picking one navigates to the right page and spotlights each control in turn until the user presses the final button themselves. Troubleshooting runbooks branch on evidence: the guide reads backend data read-only, suggests answers, stops with a reason when the evidence says "don't", and leaves a copyable case summary. Use when users can't find where an action lives ("how do I add X", "guide the user to the button"), when building a spotlight / coach-mark / highlight-the-button feature that waits for the user's own click, or when turning a support SOP or runbook (diagnose, then fix) into a guided flow inside the app. A narrated, chaptered tour of the whole app is guided-product-tour.
 ---
 
 # Smart Task Guide
@@ -17,7 +17,9 @@ component-library UI, with Playwright driving a Python mock backend.
 **The guide points, and the user presses.** It never clicks anything, and it never calls a
 write endpoint. That one rule makes it safe to put on destructive
 screens (emergency stop, irreversible flags). It also teaches the flow, because the
-user's own hands do every step.
+user's own hands do every step. (A narrated tour that drives itself through
+every page — chapters, roles, a sandbox finale — is the sibling
+`guided-product-tour`; both share the box-shadow spotlight.)
 
 ## Moving parts
 
