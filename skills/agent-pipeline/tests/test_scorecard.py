@@ -18,9 +18,18 @@ def post(login, body, created="2026-10-01T02:00:00Z", app=None):
 
 def pr(**over):
     base = {
-        "number": 1, "title": "t", "head": "groomed/1-x", "base": "release", "state": "open",
-        "created_at": "2026-10-01T00:00:00Z", "merged_at": None, "author": "alice", "by_routine": True,
-        "commits": ["2026-10-01T00:01:00Z"], "comments": [], "reviews": [],
+        "number": 1,
+        "title": "t",
+        "head": "groomed/1-x",
+        "base": "release",
+        "state": "open",
+        "created_at": "2026-10-01T00:00:00Z",
+        "merged_at": None,
+        "author": "alice",
+        "by_routine": True,
+        "commits": ["2026-10-01T00:01:00Z"],
+        "comments": [],
+        "reviews": [],
     }
     return {**base, **over}
 
@@ -31,7 +40,8 @@ def test_gh_items_flattens_pages_printed_back_to_back(monkeypatch):
         "search/issues?q=x": '{"total_count": 3, "items": [{"n": 1}]}{"total_count": 3, "items": [{"n": 2}]}',
     }
     monkeypatch.setattr(
-        sc.subprocess, "run",
+        sc.subprocess,
+        "run",
         lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, stdout=outputs[cmd[-1]], stderr=""),
     )
     assert [i["n"] for i in sc.gh_items("repos/o/r/pulls")] == [1, 2, 3]

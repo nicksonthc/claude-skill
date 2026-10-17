@@ -8,7 +8,7 @@ wip: {limit: 5, prefixes: [groomed/]}
 orient: {read_first: [CLAUDE.md], invariants: docs/invariants.md}
 components:
   - {name: app, paths: ["**"], tests: ["tests/**/test_*.py"], fixtures: tests/conftest.py,
-     static: ["pip install -q black==25.1.0", "black --check ."],
+     static: ["pip install -q black==25.1.0", "black --check {files}"],
      collect: "python -m pytest --collect-only -q {files}"}
 ci: {required: [test], proof: "Prove new tests fail without the fix", manual: ["Regression Test"], missing_after_hours: 6}
 risk: {t2: ["app/payments/**", ".claude/**"], t2_tests: [tests/scenarios/]}

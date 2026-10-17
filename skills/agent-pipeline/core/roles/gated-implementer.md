@@ -60,7 +60,8 @@ said once, not once every run.
 - Keep the change minimal: no drive-by refactors, no unrelated formatting.
 
 **G8 Checks before the PR.** No tests run here.
-- Run every `static` command of each component you touched.
+- Run every `static` command of each component you touched, with `{files}` replaced by the files you changed in it.
+  A failure in a file you did not touch is not yours: note it in the PR body and move on.
 - Run its `collect` command on the new or changed test files, with `{files}` replaced by those paths. This catches
   import errors and typos only. If it cannot run for environment reasons, say so. Never claim a test passed.
 - Review the diff with the repo's reviewer agent if `.claude/agents/reviewer.md` exists. Otherwise use a fresh-context

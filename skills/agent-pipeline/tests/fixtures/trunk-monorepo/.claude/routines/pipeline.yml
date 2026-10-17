@@ -8,9 +8,9 @@ wip: {limit: 3, prefixes: [groomed/]}
 orient: {read_first: [CLAUDE.md, svc-a/CLAUDE.md]}
 components:
   - {name: svc-a-backend, paths: ["svc-a/backend/**"], tests: ["svc-a/backend/tests/**/test_*.py"],
-     static: ["ruff check svc-a/backend"], collect: "cd svc-a/backend && python -m pytest --collect-only -q {files}"}
+     static: ["ruff check {files}"], collect: "cd svc-a/backend && python -m pytest --collect-only -q {files}"}
   - {name: svc-b-backend, paths: ["svc-b/backend/**"], tests: ["svc-b/backend/tests/**/test_*.py"],
-     static: ["ruff check svc-b/backend"], collect: "cd svc-b/backend && python -m pytest --collect-only -q {files}"}
+     static: ["ruff check {files}"], collect: "cd svc-b/backend && python -m pytest --collect-only -q {files}"}
 risk: {t2: [".claude/**"], t2_tests: []}
 routines:
   - {key: audit, prompt: local/audit.md, id: null, status: active, cron: "0 22 * * 0", model: claude-opus-5-5}

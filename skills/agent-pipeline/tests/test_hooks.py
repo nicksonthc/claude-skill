@@ -80,8 +80,14 @@ def test_push_guard_falls_back_to_main_and_master_without_a_profile(repo):
 @pytest.mark.parametrize(
     "body, code",
     [
-        ("> 🤖 **AI-generated** · Claude Code\n\nhi\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)", 0),
-        ("<!-- X -->\n> 🤖 **AI-generated** · Claude Code\nhi\n🤖 Generated with [Claude Code](https://claude.com/claude-code)", 0),
+        (
+            "> 🤖 **AI-generated** · Claude Code\n\nhi\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+            0,
+        ),
+        (
+            "<!-- X -->\n> 🤖 **AI-generated** · Claude Code\nhi\n🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+            0,
+        ),
         ("hi\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)", 2),
         ("> 🤖 **AI-generated** · Claude Code\nhi", 2),
     ],

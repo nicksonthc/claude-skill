@@ -32,7 +32,9 @@ components:            # build happens only inside one of these
     paths: ["**"]
     tests: ["tests/**/test_*.py"]
     fixtures: tests/conftest.py
-    static: ["pip install -q ruff==0.15.15", "ruff check .", "ruff format --check ."]   # pin the versions the repo pins
+    # {files} = the files the routine changed in this component, repo-relative (relative to the new dir after a `cd`);
+    # pin the versions the repo pins
+    static: ["pip install -q ruff==0.15.15", "ruff check {files}", "ruff format --check {files}"]
     collect: "python -m pytest --collect-only -q {files}"
 
 ci:                    # leave out until the repo has test CI; build, evaluate and redo need it
