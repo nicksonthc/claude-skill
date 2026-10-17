@@ -1,0 +1,101 @@
+# Agent pipeline profile and live routine registry for one repo.
+# The vendored core (.claude/routines/core/) reads this file at run time; `check.py` in the agent-pipeline skill
+# validates it. Prompts refer to these values as {dotted.key}. Cron is UTC.
+version: 1
+
+project:
+  repo: owner/name
+  description: "one line: the stack and what the system does"
+  environment_id: env_XXXXXXXXXXXXXXXXXXXXXXXX   # the claude.ai cloud environment the routines run in
+
+branches:
+  integration: main    # where PRs land, and where routines read their prompts
+  production: main     # equal to integration → trunk-based, and release-manager stays off
+
+hub:
+  issue: 0             # created by install; the audit owns its body (core/hub-contract.md)
+  marker: "<!-- PIPELINE-HUB -->"
+  legacy_markers: []
+
+approvers: [your-github-login]   # only their app-null `groomed` label and `#redo` lines count
+
+wip:
+  limit: 5             # open PRs into integration (or into a prefix below) before groom and build pause
+  prefixes: [groomed/]
+
+orient:
+  read_first: [CLAUDE.md]   # every routine reads these first
+  invariants: null          # e.g. docs/invariants.md; every change keeps it true
+
+components:            # build happens only inside one of these
+  - name: app
+    paths: ["**"]
+    tests: ["tests/**/test_*.py"]
+    fixtures: tests/conftest.py
+    static: ["pip install -q ruff==0.15.15", "ruff check .", "ruff format --check ."]   # pin the versions the repo pins
+    collect: "python -m pytest --collect-only -q {files}"
+
+ci:                    # leave out until the repo has test CI; build, evaluate and redo need it
+  required: [test]     # check-run (job) names that must be green on a PR
+  proof: "Prove new tests fail without the fix"   # the job from templates/agent-proof.yml
+  manual: []           # suites agents never trigger; a human runs them before merge
+  missing_after_hours: 6
+
+risk:
+  t2: [".claude/**", "**/CLAUDE.md"]   # paths agents touch only with t2_tests coverage
+  t2_tests: []
+
+guards: []             # [{skill: <name>, when: "<which code paths>"}]
+extra_rules: []        # repo-specific rules every routine obeys
+
+routines:
+  # Launcher and sync: the agent-pipeline skill. status: active | planned | disabled. id: null until created.
+  - key: audit
+    prompt: local/audit.md
+    id: null
+    status: planned
+    cron: "0 22 * * 0"                 # weekly
+    model: claude-opus-5-5
+    tools: [Bash, Read, Glob, Grep, Write, Task, Skill, TodoWrite]
+    sources: [owner/name]              # add other repos the audit reads
+  - key: backlog-groom
+    role: backlog-groom
+    id: null
+    status: planned
+    cron: "30 23 * * 0-4"              # weekdays, after the audit
+    model: claude-opus-5-5
+  - key: gated-implementer
+    role: gated-implementer
+    id: null
+    status: planned
+    cron: "0 1,4,7 * * 1-5"
+    model: claude-opus-5-5
+    attribution: [{head: "groomed/*", base: main}]
+  - key: pr-evaluator
+    role: pr-evaluator
+    id: null
+    status: planned
+    cron: "0 2,5,8 * * *"              # an hour after each build slot
+    model: claude-opus-5-5
+  - key: redo-executor
+    role: redo-executor
+    id: null
+    status: planned
+    cron: "0 1 * * *"
+    model: claude-opus-5-5
+  - key: release-manager             # only when integration != production
+    role: release-manager
+    id: null
+    status: planned
+    cron: "0 0 * * 1-5"
+    model: claude-sonnet-5-5
+    attribution: [{head: main, base: production-branch}]
+    score_revisions: false             # the integration branch moves under the PR by design
+  - key: scorecard
+    role: scorecard
+    id: null
+    status: planned
+    cron: "30 1 * * 1"                 # weekly
+    model: claude-sonnet-5-5
+
+removed: []            # retired routines: keep key, id, removed date, reason and attribution so the scorecard still scores their PRs
