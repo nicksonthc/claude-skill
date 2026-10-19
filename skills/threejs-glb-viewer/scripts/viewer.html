@@ -1,0 +1,346 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>GLB viewer</title>
+<!--
+  Self-contained three.js GLB viewer. No build step, no dependencies to install.
+
+    cd <folder with your .glb>
+    cp <skill>/scripts/viewer.html .
+    python3 -m http.server 8080
+    open "http://localhost:8080/viewer.html?src=object.glb"
+
+  Query params: src, manifest, bg, env(none), bloom(0..2), threshold, exposure,
+  rotate(0|1), grid(0|1), post(0|1). Drag a .glb onto the page to load it instead.
+  Everything is framed from the model's measured bounding box, so the same page
+  works for a 3 cm token and a 40 m building.
+-->
+<style>
+  :root { color-scheme: dark; --ink: #e8eaed; --dim: #9aa0a6; --warn: #ffb74d; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0d10;
+    font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink); }
+  canvas { display: block; }
+  #hud { position: fixed; top: 12px; left: 12px; padding: 10px 13px; max-width: 340px;
+    background: rgba(12, 14, 18, .74); backdrop-filter: blur(9px);
+    border: 1px solid rgba(255, 255, 255, .1); border-radius: 9px; pointer-events: none;
+    white-space: pre-wrap; }
+  #hud b { font-weight: 600; }
+  #hud .dim { color: var(--dim); }
+  #hud .warn { color: var(--warn); }
+  #list { position: fixed; top: 12px; right: 12px; bottom: 12px; width: 210px; overflow: auto;
+    padding: 8px; background: rgba(12, 14, 18, .74); backdrop-filter: blur(9px);
+    border: 1px solid rgba(255, 255, 255, .1); border-radius: 9px; display: none; }
+  #list button { display: block; width: 100%; margin-bottom: 4px; padding: 7px 9px; text-align: left;
+    font: inherit; color: var(--ink); background: transparent; border: 1px solid transparent;
+    border-radius: 6px; cursor: pointer; }
+  #list button:hover { background: rgba(255, 255, 255, .07); }
+  #list button[aria-current="true"] { border-color: rgba(120, 190, 255, .55); background: rgba(120, 190, 255, .12); }
+  #drop { position: fixed; inset: 0; display: none; place-items: center;
+    background: rgba(10, 30, 60, .55); border: 2px dashed rgba(140, 200, 255, .7); font-size: 15px; }
+  #drop.on { display: grid; }
+</style>
+<div id="hud">loading…</div>
+<div id="list"></div>
+<div id="drop">drop a .glb to load it</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three'
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js'
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js'
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js'
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
+
+const CDN = 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/libs/'
+const q = new URLSearchParams(location.search)
+const num = (k, d) => (q.has(k) ? parseFloat(q.get(k)) : d)
+const flag = (k, d) => (q.has(k) ? q.get(k) !== '0' && q.get(k) !== 'false' : d)
+
+// ------------------------------------------------------------------ renderer
+// antialias:true is deliberate but only helps the no-post path: once the composer
+// owns the frame it renders into its own non-multisampled target, so SMAAPass is
+// what actually antialiases the shipped image.
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
+renderer.setSize(innerWidth, innerHeight)
+// The two lines that decide whether the model matches Blender. Without them a PBR
+// export renders washed-out and too bright.
+renderer.outputColorSpace = THREE.SRGBColorSpace
+renderer.toneMapping = THREE.ACESFilmicToneMapping
+renderer.toneMappingExposure = num('exposure', 1)
+renderer.shadowMap.enabled = true
+renderer.shadowMap.type = THREE.PCFShadowMap   // PCFSoftShadowMap is deprecated as of r186
+renderer.info.autoReset = false                // reset once per frame so post passes are counted too
+document.body.append(renderer.domElement)
+
+const scene = new THREE.Scene()
+scene.background = new THREE.Color(q.get('bg') || '#454a54')  // mid-grey studio, like Blender's viewport: a contact shadow needs something to darken and a silhouette needs something to read against
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 100)
+
+const controls = new OrbitControls(camera, renderer.domElement)
+controls.enableDamping = true          // inertia; requires controls.update() every frame
+controls.dampingFactor = 0.06
+controls.autoRotateSpeed = 0.9
+controls.autoRotate = flag('rotate', false)
+controls.enablePan = true
+controls.screenSpacePanning = true     // pan parallel to the screen, not the ground
+
+// --------------------------------------------------------------------- light
+// Image-based lighting first: PBR metals are black without an environment. The
+// directional light exists for the shadow, not for the exposure.
+const pmrem = new THREE.PMREMGenerator(renderer)
+if (q.get('env') !== 'none') scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
+const key = new THREE.DirectionalLight(0xffffff, 1.6)
+key.castShadow = true
+key.shadow.mapSize.set(2048, 2048)
+key.shadow.bias = -0.0005
+scene.add(key, new THREE.AmbientLight(0xffffff, 0.15))
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShadowMaterial({ opacity: 0.45 }))
+ground.rotation.x = -Math.PI / 2
+ground.receiveShadow = true
+const grid = new THREE.GridHelper(1, 10, 0x5b6a80, 0x333c4a)
+grid.material.transparent = true
+grid.material.opacity = 0.7
+const helpers = new THREE.Group()
+helpers.add(ground, grid)
+helpers.visible = flag('grid', true)
+scene.add(helpers)
+
+// ---------------------------------------------------------------- post-stack
+// Order matters: scene → bloom (HDR, still linear) → SMAA → OutputPass. OutputPass
+// applies tone mapping and the sRGB conversion that three skips when rendering
+// into a render target; leave it out and the whole image comes back flat and dark.
+const composer = new EffectComposer(renderer)
+composer.addPass(new RenderPass(scene, camera))
+// Threshold well above 1, not the usual 0.85: bloom runs on the linear HDR buffer
+// BEFORE tone mapping, where a white surface lit by the environment already sits
+// near 1.0. At 0.85 an untextured CAD model turns into fog and its real colours go
+// pink. At 1.4 only specular hits and emissives glow. Showcase renders want
+// ?bloom=0.6&threshold=1.0; an inspector wants to see the model.
+// Bloom starts OFF and the rest of the stack stays on, because SMAA and OutputPass
+// are correctness and bloom is taste: it hides exactly the seams, facets and
+// inverted normals an inspector exists to reveal, and high-albedo models (white
+// CAD, whitewash, chrome) fog at any threshold near 1. Press `b`, or ?bloom=0.4.
+const strength = num('bloom', 0)
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), strength || 0.35, 0.45, num('threshold', 1.4))
+composer.addPass(bloom)
+composer.addPass(new SMAAPass())
+composer.addPass(new OutputPass())
+let usePost = flag('post', true)
+let useBloom = strength > 0
+bloom.enabled = useBloom
+
+// --------------------------------------------------------------------- loader
+const draco = new DRACOLoader().setDecoderPath(`${CDN}draco/gltf/`)
+const ktx2 = new KTX2Loader().setTranscoderPath(`${CDN}basis/`).detectSupport(renderer)
+const loader = new GLTFLoader()
+  .setDRACOLoader(draco)
+  .setKTX2Loader(ktx2)
+  .setMeshoptDecoder(MeshoptDecoder)
+
+const hud = document.getElementById('hud')
+let model = null, mixer = null, info = null, wireframe = false
+
+function dispose(object) {
+  object.traverse((o) => {
+    o.geometry?.dispose()
+    for (const m of [o.material].flat().filter(Boolean)) {
+      for (const v of Object.values(m)) v?.isTexture && v.dispose()
+      m.dispose()
+    }
+  })
+}
+
+/** Frame the camera, lights, ground and controls from the model's own box. */
+function fit(object, { move = true } = {}) {
+  const box = new THREE.Box3().setFromObject(object)
+  const size = box.getSize(new THREE.Vector3())
+  const centre = box.getCenter(new THREE.Vector3())
+  const radius = size.length() / 2 || 1
+  const distance = (radius / Math.sin((camera.fov / 2) * THREE.MathUtils.DEG2RAD)) * 1.25
+
+  camera.near = distance / 500
+  camera.far = distance * 10
+  camera.updateProjectionMatrix()
+  if (move) camera.position.set(centre.x + distance * 0.55, centre.y + distance * 0.42, centre.z + distance * 0.72)
+
+  controls.target.copy(centre)
+  controls.minDistance = radius * 0.4
+  controls.maxDistance = distance * 5
+  // Stop just short of the horizon so the camera cannot slide under the floor.
+  controls.maxPolarAngle = Math.abs(box.min.y) < radius * 0.05 ? Math.PI * 0.495 : Math.PI
+  controls.update()
+
+  key.position.set(centre.x + radius * 2, centre.y + radius * 3, centre.z + radius * 2)
+  key.target.position.copy(centre)
+  key.target.updateMatrixWorld()
+  const s = key.shadow.camera
+  s.left = -radius * 1.6; s.right = radius * 1.6; s.top = radius * 1.6; s.bottom = -radius * 1.6
+  s.near = radius * 0.1; s.far = radius * 12
+  s.updateProjectionMatrix()
+
+  ground.position.set(centre.x, box.min.y, centre.z)
+  ground.scale.setScalar(radius * 8)
+  grid.position.copy(ground.position)
+  grid.scale.setScalar(radius * 4)
+  return { box, size, centre, radius }
+}
+
+async function load(url, label = url) {
+  hud.textContent = `loading ${label}…`
+  let gltf
+  try {
+    gltf = await loader.loadAsync(url, (e) => {
+      if (e.total) hud.textContent = `loading ${label} — ${Math.round((e.loaded / e.total) * 100)}%`
+    })
+  } catch (err) {
+    hud.innerHTML = `<span class="warn">failed to load ${label}</span>\n${err.message}`
+    return
+  }
+  if (model) { scene.remove(model); dispose(model) }
+  mixer?.stopAllAction()
+  model = gltf.scene
+  model.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true } })
+  scene.add(model)
+
+  const m = fit(model)
+  mixer = gltf.animations.length ? new THREE.AnimationMixer(model) : null
+  gltf.animations.forEach((clip) => mixer.clipAction(clip).play())
+
+  let meshes = 0, materials = new Set(), tris = 0
+  model.traverse((o) => {
+    if (!o.isMesh) return
+    meshes++
+    for (const mat of [o.material].flat()) materials.add(mat)
+    const g = o.geometry
+    tris += (g.index ? g.index.count : g.attributes.position?.count ?? 0) / 3
+  })
+
+  const warn = []
+  const maxDim = Math.max(m.size.x, m.size.y, m.size.z)
+  if (Math.abs(m.box.min.y) > maxDim * 0.02) warn.push(`not grounded: minY = ${m.box.min.y.toFixed(3)}`)
+  if (Math.hypot(m.centre.x, m.centre.z) > maxDim * 0.1) warn.push('off-centre — orbiting the box centre, not the origin')
+  if (maxDim < 0.01 || maxDim > 1000) warn.push(`suspicious scale: ${maxDim.toFixed(3)} units across`)
+  if (!tris) warn.push('no geometry in the file')
+
+  info = { label, meshes, materials: materials.size, tris: Math.round(tris), ...m, warn, anims: gltf.animations.length }
+  window.__viewer = { THREE, scene, camera, controls, composer, renderer, model, info, fit: () => fit(model) }
+  document.querySelectorAll('#list button').forEach((b) => b.setAttribute('aria-current', String(b.dataset.src === url)))
+}
+
+// -------------------------------------------------------------------- gallery
+const manifest = q.get('manifest')
+if (manifest) {
+  const base = manifest.slice(0, manifest.lastIndexOf('/') + 1)
+  try {
+    const entries = await (await fetch(manifest)).json()
+    const list = document.getElementById('list')
+    list.style.display = 'block'
+    for (const e of entries) {
+      // Manifest paths are web paths ("/models/x.glb"); resolve them against the
+      // manifest's own folder so the page works from any directory.
+      const src = e.glb?.startsWith('http') ? e.glb : base + e.glb.replace(/^.*\//, '')
+      const b = document.createElement('button')
+      b.textContent = e.title || e.id
+      b.dataset.src = src
+      b.onclick = () => load(src, e.title || e.id)
+      list.append(b)
+    }
+    if (entries.length) list.firstChild.click()
+  } catch (err) {
+    hud.innerHTML = `<span class="warn">could not read ${manifest}</span>\n${err.message}`
+  }
+} else {
+  await load(q.get('src') || 'object.glb')
+}
+
+// ---------------------------------------------------------------- drag & drop
+const drop = document.getElementById('drop')
+addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('on') })
+addEventListener('dragleave', () => drop.classList.remove('on'))
+addEventListener('drop', (e) => {
+  e.preventDefault(); drop.classList.remove('on')
+  const file = e.dataTransfer.files[0]
+  if (file) load(URL.createObjectURL(file), file.name)
+})
+
+// ------------------------------------------------------------------ keyboard
+const KEYS = 'r rotate · p post · b bloom · g grid · w wire · f refit · s shot · h hud'
+addEventListener('keydown', (e) => {
+  const k = e.key.toLowerCase()
+  if (k === 'r') controls.autoRotate = !controls.autoRotate
+  else if (k === 'p') usePost = !usePost
+  else if (k === 'b') bloom.enabled = useBloom = !useBloom
+  else if (k === 'g') helpers.visible = !helpers.visible
+  else if (k === 'w') {
+    wireframe = !wireframe
+    model?.traverse((o) => { for (const m of [o.material].flat().filter(Boolean)) m.wireframe = wireframe })
+  } else if (k === 'f' && model) fit(model)
+  else if (k === 'h') hud.style.display = hud.style.display === 'none' ? '' : 'none'
+  else if (k === 's') {
+    render()                       // the buffer is only readable in the same task as a draw
+    renderer.domElement.toBlob((blob) => {
+      const a = Object.assign(document.createElement('a'), {
+        href: URL.createObjectURL(blob), download: `${(info?.label || 'shot').replace(/\W+/g, '-')}.png`,
+      })
+      a.click()
+    })
+  }
+})
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight
+  camera.updateProjectionMatrix()
+  renderer.setSize(innerWidth, innerHeight)
+  composer.setSize(innerWidth, innerHeight)
+})
+
+// --------------------------------------------------------------------- frame
+let frames = 0, fps = 0, last = performance.now()
+const render = () => (usePost ? composer.render() : renderer.render(scene, camera))
+
+let prev = 0
+renderer.setAnimationLoop((time) => {
+  // The loop timestamp is the clock: THREE.Clock is deprecated and THREE.Timer
+  // only exists from r183, so deriving dt here keeps the page version-proof.
+  const dt = prev ? (time - prev) / 1000 : 0
+  prev = time
+  mixer?.update(dt)
+  controls.update()               // damping and autoRotate both need this every frame
+  renderer.info.reset()
+  render()
+
+  if (++frames % 15 === 0) {
+    const now = performance.now()
+    fps = Math.round(15000 / (now - last)); last = now
+    if (info) {
+      const { size, centre, box } = info
+      hud.innerHTML =
+        `<b>${info.label}</b>\n` +
+        `<span class="dim">size  </span>${size.x.toFixed(3)} × ${size.y.toFixed(3)} × ${size.z.toFixed(3)}\n` +
+        `<span class="dim">centre</span> ${centre.x.toFixed(2)}, ${centre.y.toFixed(2)}, ${centre.z.toFixed(2)}   <span class="dim">minY</span> ${box.min.y.toFixed(3)}\n` +
+        `<span class="dim">geom  </span>${info.tris.toLocaleString()} tris · ${info.meshes} meshes · ${info.materials} materials` +
+        (info.anims ? ` · ${info.anims} clips` : '') + '\n' +
+        `<span class="dim">frame </span>${renderer.info.render.calls} draw calls · ${fps} fps · post ${usePost ? 'on' : 'off'}${useBloom ? ' + bloom' : ''}\n` +
+        (info.warn.length ? `<span class="warn">⚠ ${info.warn.join('\n⚠ ')}</span>\n` : '') +
+        `<span class="dim">${KEYS}</span>`
+    }
+  }
+})
+</script>
