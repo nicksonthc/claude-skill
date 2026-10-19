@@ -10,9 +10,14 @@ track in, record steps, track out), plus the upgrades a UI/UX review of it
 called for. Proven on React 19 · Tailwind v4 · shadcn/ui (Radix) · sonner.
 **Proven in production:** the single primary, the scan-first Enter chain,
 inline mismatch with select-for-rescan, the wrong-place card with a focused way
-out, busy spinners, per-unit state reset. **Designed from the review, not yet
-field-proven:** the Now prompt, bench density tokens, the remediation catalogue,
-sound cues, verdict buttons, collapsed step rows — verify them at a real bench.
+out, busy spinners, per-unit state reset. **Built and tested in the same app,
+not yet on the floor:** the Now prompt, bench density tokens, coded refusals
+with the remediation block, sound cues, verdict buttons, collapsed step rows,
+the in-flight guard (AED station console, 19-10-2026: backend
+`app/core/errors.StationError`, frontend `lib/remedies.ts`,
+`lib/stationTask.ts`, `lib/cues.ts`, `VerdictButtons`, `ProblemBlock`,
+`TaskPrompt`, with a test that every raised code has a remedy). Still to prove
+at a real bench: cue volume on floor speakers, gloved taps on 72 px targets.
 
 ## The idea in one line
 
