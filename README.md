@@ -19,6 +19,7 @@ skill here immediately changes the skill Claude Code loads.
 | [`socketio-realtime-hooks`](skills/socketio-realtime-hooks/) | React hook suite for a Socket.IO feed: one authenticated connection, never-rebinding event listeners, auto re-joining rooms, X-Client-Id ↔ skip_sid echo suppression, presence, and poll-self-heal composition. |
 | [`toast-notification-history`](skills/toast-notification-history/) | Toasts with an audit trail: drop-in sonner wrapper that mirrors every toast into a capped localStorage history with the acting user stamped on, shown in a floating-bell slide-over with unread badge. |
 | [`bilingual-copy-store`](skills/bilingual-copy-store/) | Two-language (or N-language) UI with one shared copy dictionary, a Zustand-backed toggle that persists and stays in sync across every page of a multi-entry app, typed keys for dynamic/status text, and a safe overlay for translating strings that live in generator-owned JSON. |
+| [`threejs-glb-viewer`](skills/threejs-glb-viewer/) | Show a Blender GLB on a web page: zero-dependency GLB report (box, triangles, draw calls, required decoders), a self-contained single-file viewer (GLTFLoader + DRACO/KTX2/Meshopt, OrbitControls, EffectComposer) that frames itself from the model's measured box, manifest gallery mode, and the colour-management + export gate that catches a bad export. |
 | [`image-to-3d-blender`](skills/image-to-3d-blender/) | Reference image → GLB with headless Blender: silhouette extrusion for flat/transparent images, or reference-guided procedural studies (buildings, boats, trees, figures) via a shared `studio.py` helper library, with transparent preview, .blend and manifest entry. |
 | [`smart-task-guide`](skills/smart-task-guide/) | In-app smart guide: Ctrl+K task search that navigates and spotlights each control until the user presses the final button, plus branching troubleshooting runbooks that read backend data read-only, suggest answers, stop with a reason and leave a copyable case summary; mock-backend + Playwright proof recipe. |
 | [`agent-pipeline`](skills/agent-pipeline/) | Scheduled Claude Code cloud routines for any repo — audit → groom → gated implement → evaluate → `#redo` → release PR → weekly scorecard — run from one vendored generic core plus a per-repo `pipeline.yml` profile; install, sync, update-core and drift workflows, REST-only GitHub access, and cloud-only push-guard and AI-marker hooks. |
@@ -32,7 +33,9 @@ skill here immediately changes the skill Claude Code loads.
 The R3F skills compose: `guided-placement` delegates camera framing to
 `r3f-hero-camera` and layers onto `interactive-3d-object`'s hover/select base;
 `r3f-scene-world` builds the world those three act in, and hands its GLB
-authoring to `image-to-3d-blender`. Each also stands alone.
+authoring to `image-to-3d-blender`. `threejs-glb-viewer` closes that loop — it
+displays and gates what `image-to-3d-blender` exports, before the asset is placed
+in a world or made interactive. Each also stands alone.
 
 The shop-floor app skills compose the same way: `console-app-shell` hosts the
 rest — the `system-status-popover` dot in its status row, the
@@ -73,9 +76,10 @@ Verify with `/skills`, or invoke one as `/<name>`.
 
 ```
 skills/<name>/
-├── SKILL.md            # entry point, <100 lines, frontmatter name + description
+├── SKILL.md            # entry point, frontmatter name + description
 ├── REFERENCE.md        # full spec, loaded only when needed
 ├── INPUT-TEMPLATE.md   # fill-in form for the skill's inputs
+├── scripts/            # executables the skill runs, rather than re-deriving each time
 └── examples/           # canonical reference output + provenance
 ```
 
