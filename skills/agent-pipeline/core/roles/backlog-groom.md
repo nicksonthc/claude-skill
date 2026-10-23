@@ -79,7 +79,8 @@ from `core/shared.md`, then:
 ## Backlog grooming — YYYY-MM-DD ({branches.integration} @ <short sha>, audit run <n>)
 **TL;DR:** <k> pick(s) to approve: <groom-key>, <groom-key>. Open PRs: <count>/{wip.limit} — gate passed.
 
-- [ ] **<title>** — score S/10 (impact I · size Z · rank R) · audit rank K · 🔎 traced
+- [ ] <title>
+  - score S/10 (impact I · size Z · rank R) · audit rank K · 🔎 traced
   - **Why implement:** <consequence for the user today, 1–2 sentences>
   - **Current:** <what the code does now, with `file:line`>
   - **Trace:** <entry> → <hop file:line> → <defect file:line>
@@ -92,9 +93,13 @@ from `core/shared.md`, then:
 **Needs a decision (not picked):** <groom-key — one-line blocker>, …
 **Skipped:** other repo: … · already in a PR/issue: … · suggested before: … · already fixed or wrong: …
 
-To approve: tick → "Convert to issue" → add the label `groomed`. The issue body may stay empty: the implementer
-reads these acceptance criteria from this comment, matched by title or groom-key.
+To approve: tick → "Convert to issue" → add the label `groomed`. The issue body may stay empty, and keep the title
+as converted: the implementer finds this item by that title and builds to its acceptance criteria.
 ```
+
+The task line holds the title alone, as plain text: no bold, no score, nothing after it. "Convert to issue" turns the
+whole line into the issue title, and that title is the only link from the issue back to this item
+(`core/hub-contract.md`, Groom items).
 
 ## Rules
 1. Your only write is that one hub comment. Never create issues, PRs, branches, labels or commits. Never edit the hub

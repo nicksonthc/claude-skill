@@ -10,7 +10,7 @@ While nobody has edited it locally, `git rev-parse HEAD:.claude/routines/core` e
 | `../pipeline.yml` | this repo's profile (its facts) and its live routine registry. Edit this. |
 | `../local/*.md` | routines only this repo has, such as its audit |
 | `shared.md` | the rules every routine follows |
-| `hub-contract.md` | the hub issue format: audits write it, backlog-groom reads it |
+| `hub-contract.md` | the hub issue format (audits write it, backlog-groom reads it) and how an issue finds its groom item |
 | `roles/*.md` | the six generic roles; the front matter lists default tools and what each role needs from the profile |
 | `scorecard.py` | weekly outcome metrics, REST only |
 | `hooks/` | two cloud-only hooks, registered in `.claude/settings.json`: `require-ai-marker.sh` (every GitHub write carries the AI header and footer) and `push-guard.py` (blocks pushes to the integration or production branch, force-pushes and branch deletes) |

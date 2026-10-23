@@ -99,7 +99,9 @@ The update is done when, after the merge, the repo's core tree hash equals upstr
   marks a human. Gate human commands and approvals on that field, never on the login.
 - People write `#redo` below their feedback, not first. Match any line `^\s*#redo\b`.
 - PRs into a non-default integration branch never fire `Closes #N`. The release PR has to carry those references.
-- "Convert to issue" leaves an empty body, so the acceptance criteria stay in the groom comment.
+- "Convert to issue" leaves an empty body and takes the whole task line as the title, so the acceptance criteria stay
+  in the groom comment and the title is the only key back to them. Keep the groom task line to the bare title
+  (`core/hub-contract.md`, Groom items).
 - Sessions start on the default branch. A hook registered in `.claude/settings.json` takes effect only once it reaches
   that branch, but hook scripts run from whatever branch is checked out.
 - Repo hooks run in cloud sessions too. A hook that needs a local database blocks every routine push.

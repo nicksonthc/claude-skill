@@ -31,8 +31,8 @@ evaluate".
 
 ## Step 2: The requirement
 - Find the issue through `Closes #<N>` in the PR body.
-- The requirement is that issue's body. If the body is empty, it is the app-`claude` groom item on #{hub.issue} with
-  the same title or groom-key. Never use the PR body.
+- The requirement is that issue's body. If the body is empty, it is the acceptance criteria of the issue's groom
+  item, found exactly as `core/hub-contract.md` (Groom items) says. Never use the PR body.
 - List the acceptance criteria, one testable statement each. If there are none you can test, or they are ambiguous,
   the verdict is NEEDS-HUMAN, naming the exact question.
 
