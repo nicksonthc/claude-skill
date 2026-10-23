@@ -89,15 +89,21 @@ def load_pr(repo: str, hit: dict) -> dict:
         "created_at": pr["created_at"],
         "merged_at": pr["merged_at"],
         "author": pr["user"]["login"],
-        "by_routine": app_of(hit) == ROUTINE_APP,  # the search hit carries the app; the pulls object does not
+        "by_routine": app_of(hit) == ROUTINE_APP,  # the issue item carries the app; the pulls object does not
         "commits": [c["commit"]["committer"]["date"] for c in gh_items(f"repos/{repo}/pulls/{n}/commits?per_page=100")],
         "comments": gh_items(f"repos/{repo}/issues/{n}/comments?per_page=100"),
         "reviews": gh_items(f"repos/{repo}/pulls/{n}/reviews?per_page=100"),
     }
 
 
-def load_prs(repo: str, since: datetime) -> list[dict]:
-    hits = gh_items(f"search/issues?q=repo:{repo}+is:pr+created:>={since:%Y-%m-%d}&per_page=100")
+def pr_items(repo: str) -> list[dict]:
+    """Every PR of the repo, as issue items. Cloud sessions refuse `search/issues` (403: only repository-scoped
+    endpoints), so this lists the repo's issues endpoint and keeps the PRs."""
+    return [i for i in gh_items(f"repos/{repo}/issues?state=all&per_page=100") if "pull_request" in i]
+
+
+def load_prs(repo: str, items: list[dict], since: datetime) -> list[dict]:
+    hits = [i for i in items if ts(i["created_at"]) >= since]
     with ThreadPoolExecutor(max_workers=8) as pool:
         return list(pool.map(lambda hit: load_pr(repo, hit), hits))
 
@@ -152,11 +158,11 @@ def pr_facts(pr: dict, approvers: set[str]) -> dict:
     }
 
 
-def reverted_numbers(repo: str, prs: list[dict]) -> set[int]:
+def reverted_numbers(items: list[dict], prs: list[dict]) -> set[int]:
     """PR numbers named by a revert PR: a 'Revert "<title>"' title or a 'Reverts owner/repo#N' body."""
     hits: set[int] = set()
     titles = {p["title"]: p["number"] for p in prs}
-    for revert in gh_items(f"search/issues?q=repo:{repo}+is:pr+revert+in:title&per_page=100"):
+    for revert in (i for i in items if "revert" in i["title"].lower()):
         hits |= {int(n) for n in re.findall(r"#(\d+)", revert.get("body") or "")}
         inner = revert["title"].removeprefix("Revert ").strip('"')
         if inner in titles:
@@ -213,8 +219,9 @@ def main() -> None:
     repo, hub = profile["project"]["repo"], profile["hub"]["issue"]
     approvers = set(profile.get("approvers") or [])
     now = datetime.now(timezone.utc)
-    prs = load_prs(repo, now - timedelta(days=args.window))
-    reverted = reverted_numbers(repo, prs)
+    items = pr_items(repo)
+    prs = load_prs(repo, items, now - timedelta(days=args.window))
+    reverted = reverted_numbers(items, prs)
 
     lines = [
         f"<!-- ROUTINE-SCORECARD week={now:%G-W%V} -->",

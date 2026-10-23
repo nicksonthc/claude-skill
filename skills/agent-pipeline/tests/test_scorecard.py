@@ -1,6 +1,7 @@
 """scorecard.py: REST paging, human vs routine attribution, #redo detection, merged vs closed."""
 
 import importlib.util
+import re
 import subprocess
 from pathlib import Path
 
@@ -92,3 +93,19 @@ def test_first_pass_needs_a_merge_with_no_late_push_and_no_redo():
     late_push = {**clean, "commits": ["2026-10-01T00:01:00Z", "2026-10-01T05:00:00Z"]}
     assert sc.pr_facts(clean, APPROVERS)["first_pass"] is True
     assert sc.pr_facts(late_push, APPROVERS)["first_pass"] is False
+
+
+def test_no_search_endpoint_because_cloud_sessions_refuse_it():
+    assert not re.search(r"[\"']search/", Path(sc.__file__).read_text())
+
+
+def test_pr_items_keeps_prs_and_reverts_are_found_among_them(monkeypatch):
+    items = [
+        {"number": 5, "title": "fix: a", "pull_request": {}, "body": ""},
+        {"number": 6, "title": "an issue", "body": ""},
+        {"number": 7, "title": 'Revert "fix: a"', "pull_request": {}, "body": "Reverts o/r#5"},
+    ]
+    monkeypatch.setattr(sc, "gh_items", lambda path: items)
+    prs = sc.pr_items("o/r")
+    assert [i["number"] for i in prs] == [5, 7]
+    assert sc.reverted_numbers(prs, [pr(number=5, title="fix: a")]) == {5}
