@@ -33,9 +33,9 @@ first that fails.
 - **G4 No overlap.** List the files your change will touch. If any open PR touches one of them, skip and comment on
   the issue naming that PR. Never stack a branch on another PR.
 - **G5 The requirement, and the defect it names.**
-  - Take the requirement from the issue body. If the body is empty, use the app-`claude` groom item on
-    #{hub.issue} with the same title or groom-key. If neither carries testable acceptance criteria, skip and comment
-    with the question a human must answer.
+  - Take the requirement from the issue body. If the body is empty, find the issue's groom item exactly as
+    `core/hub-contract.md` (Groom items) says, and take its acceptance criteria. If neither carries testable
+    acceptance criteria, skip and comment with the question a human must answer.
   - Confirm the defect by tracing it through the code at the cited `file:line` on `origin/{branches.integration}`,
     then write the test that fails because of it. You cannot run it; CI proves it. If the trace shows the defect is
     already fixed, or the issue is wrong, comment with what you found (and the fixing commit) and skip.
