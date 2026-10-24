@@ -64,6 +64,9 @@ Run them; never estimate them. You run no tests: test evidence comes only from C
   - Failed means REWORK: the tests pass without the fix, or none were added.
   - Missing or pending: handle it like E1.
   - Also read the test itself and confirm it asserts an acceptance criterion, not something incidental.
+  - A `{ci.autofix.prefix}` PR fixes a failure an existing test already shows, so `{ci.proof}` does not apply. Its
+    proof is the issue's `CI-DOCTOR` evidence: the signature failed on `{branches.integration}`, and the same
+    workflow passed on this head SHA. If either run is missing, handle it like E1.
 - **E5 Risk net.** If the diff touches a `{risk.t2}` path, a test under `{risk.t2_tests}` must cover it. When that
   coverage lives only in `{ci.manual}`, the verdict notes that a human must run it before merge.
 - **E6 Invariants.** The change keeps `{orient.invariants}` and every rule in `{extra_rules}` true, and contradicts no
