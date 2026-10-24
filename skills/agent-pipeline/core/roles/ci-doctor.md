@@ -40,12 +40,15 @@ PR body; its attempt count `k` is the highest `autofix-<k>` label on that issue.
 Read `origin/{branches.integration}`'s head SHA. For each workflow file in `{ci.watch}`, if no run exists for that
 SHA (`gh api "repos/{project.repo}/actions/workflows/<file>/runs?head_sha=<sha>&per_page=5"`), dispatch it on
 `{branches.integration}` (Step 6). Never dispatch the same workflow twice for one SHA. A workflow that skips itself
-(for example outside its runner's hours) is no signal: note it, and try again on a later run of the same day.
+(for example outside its runner's hours) is no signal: note it, and try again on a later run of the same day. A
+dispatch the API refuses (HTTP 422: the workflow's `workflow_dispatch` trigger is not on the default branch yet) is
+no signal either: note it in the report and move on.
 
 ## Step 3: Collect failures (deterministic)
 A failure is one of:
-- **(a)** a completed run of a `{ci.watch}` workflow on `{branches.integration}` in the last 24 hours with
-  conclusion `failure`;
+- **(a)** a completed run of a `{ci.watch}` workflow on the **current** `{branches.integration}` head SHA with
+  conclusion `failure`. A red run on an older SHA is superseded: Step 2 gives the head its own run, and a failure
+  that the head no longer has needs nothing;
 - **(b)** a `{ci.required}` check that failed with the same signature on two or more open PRs into
   `{branches.integration}`. Different diffs failing the same way means the base is broken, not the PRs.
 
