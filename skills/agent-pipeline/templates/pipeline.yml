@@ -42,6 +42,27 @@ ci:                    # leave out until the repo has test CI; build, evaluate a
   proof: "Prove new tests fail without the fix"   # the job from templates/agent-proof.yml
   manual: []           # suites agents never trigger; a human runs them before merge
   missing_after_hours: 6
+  watch: []            # workflow files ci-doctor dispatches on the integration head and heals, e.g. [ci.yml]; each needs workflow_dispatch
+  autofix:
+    prefix: ci-fix/    # ci-doctor's own branch prefix
+    max_attempts: 3    # fix attempts per failure signature, then ci-blocked
+    max_open: 2        # open ci-fix PRs at once
+
+evaluate:              # which PRs pr-evaluator judges
+  heads: [groomed/, ci-fix/]
+  opt_in_label: agent-review   # an approver adds it to have any other PR evaluated
+
+rnd:                   # pipeline-rnd: where its generic changes go, and what it may touch here
+  upstream: owner/claude-skill        # the repo holding this skill
+  upstream_branch: main
+  upstream_path: skills/agent-pipeline
+  backlog: docs/agent-pipeline.md     # its "R&D backlog" section: - [ ] items in priority order
+  paths: [".claude/routines/pipeline.yml", ".claude/routines/local/**", "docs/agent-pipeline.md"]
+  checks:                             # run from this repo's checkout; the upstream clone sits beside it
+    - "python3 -m pip install -q pyyaml pytest"
+    - "python3 -m pytest -q ../claude-skill/skills/agent-pipeline/tests"
+    - "python3 ../claude-skill/skills/agent-pipeline/check.py ."
+  max_commits: 7                      # per rolling PR
 
 risk:
   t2: [".claude/**", "**/CLAUDE.md"]   # paths agents touch only with t2_tests coverage
@@ -99,5 +120,21 @@ routines:
     status: planned
     cron: "30 1 * * 1"                 # weekly
     model: claude-sonnet-5-5
+
+  - key: ci-doctor
+    role: ci-doctor
+    id: null
+    status: planned
+    cron: "0 1-9/2 * * 1-5"            # weekdays, every two hours inside working hours
+    model: claude-opus-5-5
+    attribution: [{head: "ci-fix/*", base: main}]
+  - key: pipeline-rnd
+    role: pipeline-rnd
+    id: null
+    status: planned
+    cron: "30 5 * * 1-5"               # weekdays, after the evaluator's midday slot
+    model: claude-opus-5-5
+    sources: [owner/name, owner/claude-skill]
+    attribution: [{head: "rnd/*", base: main}]
 
 removed: []            # retired routines: keep key, id, removed date, reason and attribution so the scorecard still scores their PRs

@@ -58,7 +58,14 @@ Merge these entries into the repo's existing `hooks.PreToolUse` list:
 | `<!-- PR-EVALUATION sha=<head> verdict=<v> -->` | pr-evaluator | pr-evaluator (once per SHA), redo-executor (findings) |
 | `<!-- REDO-DONE for=<comment id> sha=<sha> status=<s> -->` | redo-executor | redo-executor (answered), scorecard |
 | `<!-- ROUTINE-SCORECARD week=<YYYY-Www> -->` | scorecard | scorecard (once per week) |
+| `<!-- CI-DOCTOR sig=<signature> -->` | ci-doctor (issue body) | ci-doctor (one issue per signature), pipeline-rnd |
+| `<!-- CI-DOCTOR-FLAKY -->` | ci-doctor (issue body) | ci-doctor (append a flake), pipeline-rnd |
+| `<!-- CI-DOCTOR-VERIFIED sha=<head> -->` | ci-doctor | ci-doctor (once per SHA), humans |
+| `<!-- RND-LOG week=<YYYY-Www> -->` | pipeline-rnd (PR body) | pipeline-rnd (its rolling PR), humans |
 | `<!-- agent-pipeline core=<tree> run=<session> -->` (line 2) | every routine | humans: which core ran, and a link to the run log |
+
+Labels the loops use (create them at install): `ci-failure`, `needs-human`, `ci-blocked`, `autofix-1` … `autofix-<max>`,
+`flaky`, `agent-pause`, `rnd`, `rnd-stop`, and `evaluate.opt_in_label`.
 
 Readers count a marker only on an app-`claude` post. Human commands (`#redo`) and approvals (the `groomed` label) count
 only when app-null and made by an approver.

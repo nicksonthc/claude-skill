@@ -19,7 +19,8 @@ covers the area.
 This step is deterministic and takes no judgement. List the open PRs (REST). A PR is **eligible** only when all of
 these hold:
 - its base is `{branches.integration}`;
-- its head starts with `groomed/`;
+- its head starts with one of `{evaluate.heads}`, or it carries the label `{evaluate.opt_in_label}` added app-null by
+  someone in `{approvers}` (the opt-in);
 - it is not a draft;
 - no app-`claude` comment on it starts with `<!-- PR-EVALUATION sha=<its current head SHA>`.
 
@@ -32,7 +33,9 @@ evaluate".
 ## Step 2: The requirement
 - Find the issue through `Closes #<N>` in the PR body.
 - The requirement is that issue's body. If the body is empty, it is the acceptance criteria of the issue's groom
-  item, found exactly as `core/hub-contract.md` (Groom items) says. Never use the PR body.
+  item, found exactly as `core/hub-contract.md` (Groom items) says. Never use the PR body, with one exception: an
+  opted-in PR with no `Closes #<N>` whose author is a human (the PR is app-null) takes its requirement from its own
+  body.
 - List the acceptance criteria, one testable statement each. If there are none you can test, or they are ambiguous,
   the verdict is NEEDS-HUMAN, naming the exact question.
 
@@ -61,6 +64,9 @@ Run them; never estimate them. You run no tests: test evidence comes only from C
   - Failed means REWORK: the tests pass without the fix, or none were added.
   - Missing or pending: handle it like E1.
   - Also read the test itself and confirm it asserts an acceptance criterion, not something incidental.
+  - A `{ci.autofix.prefix}` PR fixes a failure an existing test already shows, so `{ci.proof}` does not apply. Its
+    proof is the issue's `CI-DOCTOR` evidence: the signature failed on `{branches.integration}`, and the same
+    workflow passed on this head SHA. If either run is missing, handle it like E1.
 - **E5 Risk net.** If the diff touches a `{risk.t2}` path, a test under `{risk.t2_tests}` must cover it. When that
   coverage lives only in `{ci.manual}`, the verdict notes that a human must run it before merge.
 - **E6 Invariants.** The change keeps `{orient.invariants}` and every rule in `{extra_rules}` true, and contradicts no
