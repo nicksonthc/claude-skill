@@ -21,7 +21,7 @@ except ImportError:
     sys.exit("PyYAML missing: pip install pyyaml")
 
 SKILL_CORE = Path(__file__).resolve().parent / "core"
-TOP_KEYS = "project|branches|hub|approvers|wip|orient|components|ci|risk|guards|extra_rules"
+TOP_KEYS = "project|branches|hub|approvers|wip|orient|components|ci|evaluate|rnd|risk|guards|extra_rules"
 KEY_REF = re.compile(r"\{((?:" + TOP_KEYS + r")(?:\.[a-z_]+)*)\}")
 BASE_REQUIRED = ["project.repo", "project.description", "branches.integration", "branches.production"]
 STATUSES = {"active", "planned", "disabled"}

@@ -14,6 +14,10 @@ One pipeline serves every repo, in three layers:
 Each claude.ai routine runs a short launcher. The launcher reads the profile, `core/shared.md` and the routine's
 prompt from the integration branch at run time.
 
+Two capped loops run beside the flow, with no human gate before they act and a human merge after: `ci-doctor` heals
+red CI (rerun once, one issue per failure, at most `ci.autofix.max_attempts` fix attempts), and `pipeline-rnd`
+improves the pipeline itself (one researched change per run to a rolling PR).
+
 The flow: find (local audit → hub issue) → groom (≤3 traced picks) → approve (a human labels the issue `groomed`) →
 build → evaluate → revise (a human writes `#redo`) → ship → measure.
 
