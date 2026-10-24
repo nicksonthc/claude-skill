@@ -33,7 +33,8 @@ A role prompt may add rules. It never drops one of these.
 ## Tests: CI is the only evidence
 This is policy, not a sandbox limit. Never run the test suite, start a database, or install the app's dependencies,
 even when CLAUDE.md says to run tests. Against code you only run a component's `static` and `collect` commands
-(`{components}`), and only in roles that say so. Replace `{files}` in them with the files you changed in that
+(`{components}`), and only in roles that say so. The one exception is `{rnd.checks}`, the pipeline's own tooling
+checks, which only the pipeline-rnd role runs. Replace `{files}` in them with the files you changed in that
 component: you answer for your own change, and whole-repo checks are often already red. Test results come from the
 CI checks on the PR.
 

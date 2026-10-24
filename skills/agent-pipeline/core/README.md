@@ -11,13 +11,21 @@ While nobody has edited it locally, `git rev-parse HEAD:.claude/routines/core` e
 | `../local/*.md` | routines only this repo has, such as its audit |
 | `shared.md` | the rules every routine follows |
 | `hub-contract.md` | the hub issue format (audits write it, backlog-groom reads it) and how an issue finds its groom item |
-| `roles/*.md` | the six generic roles; the front matter lists default tools and what each role needs from the profile |
+| `roles/*.md` | the eight generic roles; the front matter lists default tools and what each role needs from the profile |
 | `scorecard.py` | weekly outcome metrics, REST only |
 | `hooks/` | two cloud-only hooks, registered in `.claude/settings.json`: `require-ai-marker.sh` (every GitHub write carries the AI header and footer) and `push-guard.py` (blocks pushes to the integration or production branch, force-pushes and branch deletes) |
 
 ## The flow
 find (a local audit) → groom → approve (a human labels the issue `groomed`) → build → evaluate → revise (a human
 writes `#redo`) → ship → measure
+
+Two loops run beside it without a human gate, each capped, and each ships only PRs a human merges:
+- **heal** (`ci-doctor`): a failed watched workflow → rerun once (flaky or broken) → one issue per signature → a
+  fix PR on its own branch → CI on that branch → at most `ci.autofix.max_attempts` tries, then `ci-blocked`.
+- **improve** (`pipeline-rnd`): last week's pipeline evidence + fetched sources → one change per run to a rolling
+  `rnd/pipeline-<week>` PR, upstream for generic changes and in the repo for its own facts.
+
+The label `agent-pause` on the hub issue stops both loops.
 
 ## How a routine runs
 Each routine's claude.ai prompt is a short launcher. Run `check.py --launcher <key>` in the skill to print it.
