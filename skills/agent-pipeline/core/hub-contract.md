@@ -31,9 +31,12 @@ The audit rewrites the whole body on every run, in this order:
 - Prefer fewer real findings over a long speculative list. An ungrounded grade is worse than no grade.
 
 ## Groom items
-A human approves a groom item with "Convert to issue", which makes an issue whose title is the item's task line and
-whose body is empty. The groom-key never reaches the issue, so the title is the only link back. gated-implementer and
-pr-evaluator find an empty-bodied issue's groom item this way:
+backlog-groom opens one `groom-proposed` issue per pick: its title is the item's task line and its body is the item
+itself, groom-key included. A human approves it by adding `groomed`, and that body is the requirement.
+
+A human may instead approve the task line itself with "Convert to issue", which makes an issue whose title is that
+line and whose body is empty. The groom-key never reaches such an issue, so the title is the only link back.
+gated-implementer and pr-evaluator find an empty-bodied issue's groom item this way:
 1. **Normalise** a title: remove every `**`, cut from the first ` — score` to the end (older groom lines carried the
    score there), and trim the whitespace.
 2. **Search** the app-`claude` comments on #{hub.issue} whose line 1 is `<!-- BACKLOG-GROOM -->`, newest first. The
@@ -45,4 +48,5 @@ pr-evaluator find an empty-bodied issue's groom item this way:
 4. **No match** (the title was edited, or the item never existed) means no requirement: say so, and ask a human to
    paste the acceptance criteria into the issue body.
 
-A non-empty issue body written by a human is the requirement, and the groom item is only background.
+A non-empty issue body is the requirement — whether a human wrote it or backlog-groom did — and a groom item found
+by title is then only background.
