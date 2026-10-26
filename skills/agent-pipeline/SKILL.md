@@ -48,8 +48,9 @@ For the moving parts, see `core/README.md`. For the RemoteTrigger body, the hook
 6. **The audit.** Write it from `templates/local-audit.md`. It must follow `core/hub-contract.md`.
 7. **CI proof job.** If the repo has test CI, add the proof job from `templates/agent-proof.yml`, adapting its setup
    steps.
-8. **The hub issue.** Create it with a body of the marker line, the AI header and "awaiting the first audit", then
-   record its number in the profile.
+8. **The hub issue and the labels.** Create the hub with a body of the marker line, the AI header and "awaiting the
+   first audit", then record its number in the profile. Create the labels the routines read and write — at least
+   `groomed` and `groom-proposed`: no routine ever creates a label.
 9. **Check and PR.** `python3 <skill>/check.py <repo>` must report 0 errors. Then open the PR. `.claude/**` always
    gets human review and is never auto-merged.
 10. **Go live.** Wait until the PR has merged and `.claude/settings.json` is on the default branch. Then:
@@ -103,9 +104,10 @@ The update is done when, after the merge, the repo's core tree hash equals upstr
   marks a human. Gate human commands and approvals on that field, never on the login.
 - People write `#redo` below their feedback, not first. Match any line `^\s*#redo\b`.
 - PRs into a non-default integration branch never fire `Closes #N`. The release PR has to carry those references.
-- "Convert to issue" leaves an empty body and takes the whole task line as the title, so the acceptance criteria stay
-  in the groom comment and the title is the only key back to them. Keep the groom task line to the bare title
-  (`core/hub-contract.md`, Groom items).
+- Picks that only a human can turn into issues sit unapproved: six of them in one 12-day stretch, with the
+  implementer idle. backlog-groom opens the proposal issue itself, labelled `groom-proposed`, so approving is one
+  label. "Convert to issue" stays the fallback — it leaves an empty body and takes the whole task line as the title,
+  which is why that line is still the bare title (`core/hub-contract.md`, Groom items).
 - Sessions start on the default branch. A hook registered in `.claude/settings.json` takes effect only once it reaches
   that branch, but hook scripts run from whatever branch is checked out.
 - Repo hooks run in cloud sessions too. A hook that needs a local database blocks every routine push.
