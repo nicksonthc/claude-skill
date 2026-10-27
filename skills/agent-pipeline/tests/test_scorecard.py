@@ -35,18 +35,37 @@ def pr(**over):
     return {**base, **over}
 
 
-def test_gh_items_flattens_pages_printed_back_to_back(monkeypatch):
-    outputs = {
-        "repos/o/r/pulls": '[{"n": 1}, {"n": 2}]\n[{"n": 3}]\n',
-        "search/issues?q=x": '{"total_count": 3, "items": [{"n": 1}]}{"total_count": 3, "items": [{"n": 2}]}',
-    }
-    monkeypatch.setattr(
-        sc.subprocess,
-        "run",
-        lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, stdout=outputs[cmd[-1]], stderr=""),
+def serve(monkeypatch, outputs: dict) -> list[str]:
+    """Answer each `gh api <path>` from `outputs`, and record the paths asked for."""
+    asked: list[str] = []
+
+    def run(cmd, **kw):
+        asked.append(cmd[-1])
+        return subprocess.CompletedProcess(cmd, 0, stdout=outputs[cmd[-1]], stderr="")
+
+    monkeypatch.setattr(sc.subprocess, "run", run)
+    return asked
+
+
+def test_gh_items_walks_page_n_and_stops_on_a_short_page(monkeypatch):
+    asked = serve(
+        monkeypatch,
+        {
+            "repos/o/r/pulls?per_page=2&page=1": '[{"n": 1}, {"n": 2}]',
+            "repos/o/r/pulls?per_page=2&page=2": '[{"n": 3}]',
+            "search/issues?q=x&per_page=1&page=1": '{"total_count": 2, "items": [{"n": 1}]}',
+            "search/issues?q=x&per_page=1&page=2": '{"total_count": 2, "items": []}',
+        },
     )
-    assert [i["n"] for i in sc.gh_items("repos/o/r/pulls")] == [1, 2, 3]
-    assert [i["n"] for i in sc.gh_items("search/issues?q=x")] == [1, 2]
+    assert [i["n"] for i in sc.gh_items("repos/o/r/pulls?per_page=2")] == [1, 2, 3]
+    assert [i["n"] for i in sc.gh_items("search/issues?q=x&per_page=1")] == [1]
+    assert asked[:2] == ["repos/o/r/pulls?per_page=2&page=1", "repos/o/r/pulls?per_page=2&page=2"]
+
+
+def test_gh_pages_asks_once_for_a_single_object(monkeypatch):
+    asked = serve(monkeypatch, {"repos/o/r/pulls/7?page=1": '{"number": 7}'})
+    assert sc.gh_pages("repos/o/r/pulls/7") == [{"number": 7}]
+    assert asked == ["repos/o/r/pulls/7?page=1"]
 
 
 def test_a_redo_line_below_the_feedback_counts():
