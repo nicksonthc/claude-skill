@@ -54,18 +54,23 @@ reporting an invalid token is normal there. Use `gh api` (REST), or the GitHub M
 
 | Need | Command |
 |---|---|
-| open PRs | `gh api "repos/{project.repo}/pulls?state=open&per_page=100" --paginate` |
-| one PR · its files | `gh api repos/{project.repo}/pulls/<n>` · `gh api "repos/{project.repo}/pulls/<n>/files?per_page=100" --paginate` |
+| open PRs | `gh api "repos/{project.repo}/pulls?state=open&per_page=100"` |
+| one PR · its files | `gh api repos/{project.repo}/pulls/<n>` · `gh api "repos/{project.repo}/pulls/<n>/files?per_page=100"` |
 | PR diff | `gh api repos/{project.repo}/pulls/<n> -H "Accept: application/vnd.github.diff"` |
-| issue or PR comments | `gh api "repos/{project.repo}/issues/<n>/comments?per_page=100" --paginate` |
-| reviews · review comments | `gh api repos/{project.repo}/pulls/<n>/reviews --paginate` · `gh api repos/{project.repo}/pulls/<n>/comments --paginate` |
-| CI on a commit | `gh api repos/{project.repo}/commits/<sha>/check-runs --paginate` and `gh api repos/{project.repo}/commits/<sha>/status` |
-| issues with a label | `gh api "repos/{project.repo}/issues?labels=<label>&state=open&per_page=100" --paginate` (entries with `pull_request` are PRs; skip them) |
-| one issue · its timeline | `gh api repos/{project.repo}/issues/<n>` · `gh api repos/{project.repo}/issues/<n>/timeline --paginate` |
+| issue or PR comments | `gh api "repos/{project.repo}/issues/<n>/comments?per_page=100"` |
+| reviews · review comments | `gh api repos/{project.repo}/pulls/<n>/reviews` · `gh api repos/{project.repo}/pulls/<n>/comments` |
+| CI on a commit | `gh api repos/{project.repo}/commits/<sha>/check-runs` and `gh api repos/{project.repo}/commits/<sha>/status` |
+| issues with a label | `gh api "repos/{project.repo}/issues?labels=<label>&state=open&per_page=100"` (entries with `pull_request` are PRs; skip them) |
+| one issue · its timeline | `gh api repos/{project.repo}/issues/<n>` · `gh api repos/{project.repo}/issues/<n>/timeline` |
 | search | `gh api "search/issues?q=repo:{project.repo}+<terms>&per_page=100"` |
 | comment | `gh api repos/{project.repo}/issues/<n>/comments -F body=@<file>` |
 | edit an issue or PR body | `gh api -X PATCH repos/{project.repo}/issues/<n> -F body=@<file>` |
 | create a PR | `gh api repos/{project.repo}/pulls -f title=<title> -f head=<branch> -f base=<base> -F body=@<file>` |
+
+Never `--paginate`: `gh` follows the response's `Link: rel="next"`, GitHub writes that URL in the numeric-ID
+form `repositories/{id}/…`, and the proxy refuses it (403, "Numeric-ID repository paths … are not supported").
+The first page still prints, so the 403 arrives only once a list outgrows it. For a list that may exceed
+`per_page`, add `&page=<n>` and repeat until a page comes back with fewer than `per_page` entries.
 
 Write every body to a file first, then post it with `-F body=@<file>`.
 
