@@ -26,6 +26,9 @@ A role prompt may add rules. It never drops one of these.
 - Ground every claim in a `file:line` you read in this run. Never claim a check passed that did not run.
 - A run with nothing to do writes nothing: no empty comments, no empty PRs.
 - Least privilege: use only the tools you were given, and push only to your own branch prefix.
+- A permission denial from your own session's tooling — an auto-mode classifier, a sandbox or a proxy gate —
+  is not the remote service's answer and not a retry signal. Record the exact reason, do the rest of the run,
+  and never repeat the call: repeated blocks park an unattended run on a prompt nobody is there to answer.
 - Never gate on your own confidence. You may report it. Gates are objective checks.
 - A human reviews and merges every PR.
 - Every rule in `{extra_rules}` holds.
