@@ -17,6 +17,23 @@ The audit rewrites the whole body on every run, in this order:
 7. A section whose heading starts with `Verified closed`, inside `<details>`. Each entry names the commit that fixed it.
 8. A `Removed this run` line for every finding dropped this run, with the reason.
 
+## Size
+The body is a fixed container with a producer that only grows. GitHub caps an issue body at **65,536 codepoints**
+and answers a longer PATCH with `422 Validation failed: Body is too long (maximum is 65536 characters)`. The
+endpoint's own reference documents no limit, so a run meets the cap for the first time as a failed write that loses
+the whole rewrite. A comment is the larger container — up to 262,144 bytes — which is why overflow moves into one.
+
+- **Measure before you write.** Count the codepoints of the body you assembled. Above **60,000**, relocate until it
+  fits: that floor leaves one run's growth of headroom, and a body already over it is relocated this run, not next.
+- **Relocate, never truncate.** What does not fit moves **verbatim** into this run's `<!-- AUDIT-CHANGELOG -->`
+  comment, and the body keeps a one-line pointer naming the section and linking that comment. Relocating is not
+  dropping: a finding you actually drop still belongs under `Removed this run` with its reason.
+- **Eviction order**, from the back: `Verified closed` (7) first, then the oldest carried findings of the lowest
+  grade in the findings sections (5).
+- **Never relocate** sections 1-4 or **6**. backlog-groom parses `Enhancement suggestions` out of the **body**, and
+  1-3 are how every reader identifies the hub; move either and the next groom run reads a hub that looks empty.
+- **Say what moved** in the change-log comment, so the next audit run and backlog-groom can find it again.
+
 ## Rules
 - Edit #{hub.issue} in place. If it is closed or missing, stop and report. The skill's *install* creates the hub, and
   you never open a second one. `{hub.legacy_markers}` are older spellings of the same marker: replace one with
