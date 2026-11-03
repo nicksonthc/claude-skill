@@ -5,6 +5,7 @@ needs: [hub.issue, components]
 tools: [Bash, Read, Glob, Grep]
 writes:
   - "one comment on the hub issue, line 1 <!-- BACKLOG-GROOM -->, at most 3 task-list picks"
+  - "one issue per pick, labelled groom-proposed and nothing else, at most 3 per run"
 ---
 # Backlog groom
 
@@ -13,9 +14,10 @@ never build anything.
 
 **Your one job.** Read the hub issue #{hub.issue}. Pick up to 3 items for this repo that meet all three conditions:
 nobody suggested them before, nothing is already in flight for them, and you **traced** their defect end to end on
-`origin/{branches.integration}`. Post ONE comment on the hub listing them as tickable task-list items. A human ticks
-the ones they agree with, turns each into an issue and labels it `groomed`. gated-implementer builds only `groomed`
-issues.
+`origin/{branches.integration}`. Open ONE issue per pick, labelled `groom-proposed`, and post ONE comment on the hub
+listing the picks as tickable task-list items that link to those issues. Approval is then one step: an approver adds
+`groomed` to the issue. gated-implementer builds only `groomed` issues, so a `groom-proposed` issue is a proposal and
+nothing else.
 
 ## Step 0: WIP gate
 List the open PRs (REST). Count those whose base is `{branches.integration}`, or whose base starts with a prefix in
@@ -35,7 +37,8 @@ List the open PRs (REST). Count those whose base is `{branches.integration}`, or
 Give each ranked enhancement a stable **groom-key**: a short kebab-case slug of its title, never its rank (ranks move
 between audits). Drop a candidate when any of these is true:
 - its groom-key appears in an earlier groom comment;
-- an open or merged PR, or an issue, already covers it (match on title, body, or a `groomed/*` branch name);
+- an open or merged PR, or an issue, already covers it (match on title, body, or a `groomed/*` branch name). Your
+  own `groom-proposed` issues are issues: a pick that still sits in one is never proposed again;
 - the latest audit marks it closed or "fix in flight";
 - it names a repo other than {project.repo}. For an item that spans repos, only this repo's half is a candidate.
 
@@ -71,7 +74,24 @@ Work through the candidates in audit order:
 
 Take the top 3. If none are eligible, write nothing and end with "No new eligible items".
 
-## Step 4: Post one comment
+## Step 4: Open one issue per pick
+The issue is what a human labels, so it carries the requirement. For each pick, in order:
+
+1. **Preflight the label, once per run.** `gh api repos/{project.repo}/labels/groom-proposed`. A 404 means the label
+   does not exist: open no issue at all, post the comment of Step 5 as usual, and end your report asking a human to
+   create it. You never create, edit or delete a label.
+2. **Open the issue.** Title: the pick's task line, verbatim. Body: the header lines from `core/shared.md`, then the
+   pick's own bullets unchanged — **Why implement** through **Scope / risk**, with its `<!-- groom-key: … -->` — then
+   a line naming #{hub.issue} as where the pick came from.
+   `gh api repos/{project.repo}/issues -f title=<title> -F body=@<file> -f "labels[]=groom-proposed"`
+3. **Read it back.** `gh api repos/{project.repo}/issues/<N> --jq '[.labels[].name]'`. A token without push access
+   has its labels silently dropped, so an issue that comes back without `groom-proposed` is reported as unlabelled
+   in the comment and in your report. Never work around it with another label, and never add `groomed`.
+
+At most one issue per pick, so at most 3 per run. An item you could not open an issue for is still listed in the
+comment, marked `no issue`, and a human converts that one by hand.
+
+## Step 5: Post one comment
 Write the body to a file and post it on #{hub.issue}. Line 1 is `<!-- BACKLOG-GROOM -->`, followed by the header lines
 from `core/shared.md`, then:
 
@@ -80,7 +100,7 @@ from `core/shared.md`, then:
 **TL;DR:** <k> pick(s) to approve: <groom-key>, <groom-key>. Open PRs: <count>/{wip.limit} — gate passed.
 
 - [ ] <title>
-  - score S/10 (impact I · size Z · rank R) · audit rank K · 🔎 traced
+  - proposal #<N> · score S/10 (impact I · size Z · rank R) · audit rank K · 🔎 traced
   - **Why implement:** <consequence for the user today, 1–2 sentences>
   - **Current:** <what the code does now, with `file:line`>
   - **Trace:** <entry> → <hop file:line> → <defect file:line>
@@ -93,17 +113,19 @@ from `core/shared.md`, then:
 **Needs a decision (not picked):** <groom-key — one-line blocker>, …
 **Skipped:** other repo: … · already in a PR/issue: … · suggested before: … · already fixed or wrong: …
 
-To approve: tick → "Convert to issue" → add the label `groomed`. The issue body may stay empty, and keep the title
-as converted: the implementer finds this item by that title and builds to its acceptance criteria.
+To approve: add the label `groomed` to the pick's proposal issue. Its body already carries the acceptance criteria,
+so keep the title and the body as posted. A pick marked `no issue` is approved the old way: tick →
+"Convert to issue" → add `groomed`.
 ```
 
-The task line holds the title alone, as plain text: no bold, no score, nothing after it. "Convert to issue" turns the
-whole line into the issue title, and that title is the only link from the issue back to this item
+The task line holds the title alone, as plain text: no bold, no score, nothing after it. It is the title of the
+proposal issue, and the only link back to this item when a human converts the line instead
 (`core/hub-contract.md`, Groom items).
 
 ## Rules
-1. Your only write is that one hub comment. Never create issues, PRs, branches, labels or commits. Never edit the hub
-   body or anyone's comment.
+1. Your only writes are that one hub comment and one `groom-proposed` issue per pick. Never create a PR, branch,
+   label or commit. Never add `groomed` — to your own proposals or to anything else — because only an approver's
+   label starts work. Never edit the hub body, anyone's comment, or an issue you did not open this run.
 2. Never repeat a groom-key from an earlier groom comment.
 3. Ground every "Current" line in a `file:line` you read in this run. Never invent a line number.
 4. Never pick an item whose trace has an inferred hop. Never claim a test ran, and never write "reproduced".

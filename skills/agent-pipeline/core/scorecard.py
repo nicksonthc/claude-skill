@@ -39,22 +39,33 @@ REDO_DONE = re.compile(r"<!-- REDO-DONE\b[^>]*\bstatus=done\b")
 # A commit this long after the PR was opened counts as a revision (initial pushes land within minutes).
 REVISION_GRACE = timedelta(minutes=10)
 AI_HEADER = "> 🤖 **AI-generated** · Claude Code"
+MAX_PAGES = 100
 FOOTER = "🤖 Generated with [Claude Code](https://claude.com/claude-code)"
 
 
 def gh_pages(path: str) -> list[Any]:
-    """Every page of a REST GET. `gh api --paginate` prints one JSON document per page, back to back."""
-    proc = subprocess.run(["gh", "api", "--paginate", path], capture_output=True, text=True)
-    if proc.returncode:
-        sys.exit(f"gh api {path} failed: {proc.stderr.strip()}")
-    decoder, text, pos, pages = json.JSONDecoder(), proc.stdout, 0, []
-    while True:
-        while pos < len(text) and text[pos].isspace():
-            pos += 1
-        if pos == len(text):
-            return pages
-        page, pos = decoder.raw_decode(text, pos)
+    """Every page of a REST GET, one request per page.
+
+    Not `gh api --paginate`: it follows the response's `Link: rel="next"`, and GitHub writes that URL in the
+    numeric-ID form `repositories/{id}/...`, which the Claude Code GitHub proxy refuses (403, "Numeric-ID repository
+    paths ... are not supported through this proxy"). Any list longer than one page then kills the run. Walking
+    `page=N` on the `repos/{owner}/{repo}/...` path the caller gave keeps every request in the form the proxy serves.
+    """
+    per_page = int(m.group(1)) if (m := re.search(r"[?&]per_page=(\d+)", path)) else 0
+    pages: list[Any] = []
+    for number in range(1, MAX_PAGES + 1):
+        sep = "&" if "?" in path else "?"
+        proc = subprocess.run(["gh", "api", f"{path}{sep}page={number}"], capture_output=True, text=True)
+        if proc.returncode:
+            sys.exit(f"gh api {path} failed: {proc.stderr.strip()}")
+        page = json.loads(proc.stdout)
+        items = page["items"] if isinstance(page, dict) and "items" in page else page
+        if not isinstance(items, list):
+            return [page]  # a single object, e.g. one PR: there is nothing to page through
         pages.append(page)
+        if not per_page or len(items) < per_page:
+            break
+    return pages
 
 
 def gh_items(path: str) -> list[dict]:
