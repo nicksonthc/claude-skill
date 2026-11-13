@@ -11,8 +11,10 @@ CORE = Path(__file__).resolve().parents[1] / "core"
 SHARED = (CORE / "shared.md").read_text()
 
 
-def test_the_scorecard_never_passes_paginate_to_gh():
-    assert '"--paginate"' not in (CORE / "scorecard.py").read_text()
+def test_no_script_in_the_core_passes_paginate_to_gh():
+    scripts = sorted((CORE / "bin").glob("*.py"))
+    assert scripts, "the core's scripts went missing"
+    assert [p.name for p in scripts if '"--paginate"' in p.read_text()] == []
 
 
 def test_no_command_in_the_rest_table_uses_paginate():

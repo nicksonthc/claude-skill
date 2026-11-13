@@ -4,10 +4,15 @@ stage: heal
 needs: [ci.watch, ci.autofix, components]
 tools: [Bash, Read, Glob, Grep, Write, Edit, Task, Skill, TodoWrite]
 writes:
-  - "workflow dispatches of {ci.watch} on the integration head and on its own fix branches; one rerun of a failed integration run"
-  - "one issue per failure signature, line 1 <!-- CI-DOCTOR sig=<sig> -->, labels ci-failure / needs-human / autofix-<k> / ci-blocked"
-  - "one flaky-test issue, line 1 <!-- CI-DOCTOR-FLAKY -->"
-  - "branch {ci.autofix.prefix}<issue>-<slug> off origin/{branches.integration} and a PR into {branches.integration} with 'Closes #<issue>'"
+  - {kind: dispatch, note: "workflow_dispatch of {ci.watch} on the integration head and on its own fix branches"}
+  - {kind: rerun, note: "the failed jobs of one failed integration run, once"}
+  - {kind: issue, marker: "CI-DOCTOR sig=<sig>", labels: [ci-failure], dedupe: marker}
+  - {kind: issue, marker: "CI-DOCTOR-FLAKY", labels: [flaky], dedupe: marker, max: 1}
+  - {kind: comment, to: issue, marker: "CI-DOCTOR-VERIFIED sha=<sha>", dedupe: marker}
+  - {kind: comment, to: issue}
+  - {kind: label, note: "autofix-<k>, needs-human and ci-blocked, on its own CI-DOCTOR issues only"}
+  - {kind: push, head: "{ci.autofix.prefix}"}
+  - {kind: pr, head: "{ci.autofix.prefix}", max: 1}
 ---
 # CI doctor
 
@@ -19,16 +24,22 @@ number of attempts. A human merges every fix.
 Before you change any code, read the repo's CLAUDE.md (architecture, code style, working style), and load each skill
 in `{guards}` whose `when` applies.
 
+Your issues, comments and PR go through `pipeline.py post` (`core/shared.md`, Run protocol). Its `CI-DOCTOR sig=<sig>`
+issue is one per signature, and its `CI-DOCTOR-VERIFIED sha=<head>` comment is one per head SHA: the gateway skips a
+repeat. Workflow dispatches, reruns and the labels on your own issues are plain `gh api` calls.
+
 ## Step 0: Pause
-If #{hub.issue} carries the label `agent-pause`, write nothing and end with "paused by agent-pause".
+If #{hub.issue} carries the label `agent-pause`, write nothing and finish with `--outcome noop --summary "paused by
+agent-pause"`.
 
 ## Step 1: Follow up your own fixes (before anything new)
 List the open PRs whose head starts with `{ci.autofix.prefix}`. For each, read every run of `{ci.watch}` on its head
 SHA (`gh api "repos/{project.repo}/actions/runs?head_sha=<sha>&per_page=50"`). Its issue is the `Closes #<N>` in the
 PR body; its attempt count `k` is the highest `autofix-<k>` label on that issue.
 - **Still running, or not dispatched yet:** dispatch the missing ones (Step 6), then leave it for the next run.
-- **Every watched run `success`:** comment once per head SHA on the issue, line 1
-  `<!-- CI-DOCTOR-VERIFIED sha=<head> -->`, linking the green runs and saying it awaits human review. Nothing else.
+- **Every watched run `success`:** post on the issue with
+  `pipeline.py post --kind comment --issue <N> --marker "CI-DOCTOR-VERIFIED sha=<head>" --body-file <file>`, linking
+  the green runs and saying it awaits human review. Nothing else.
 - **A watched run failed with the issue's signature:** if `k < {ci.autofix.max_attempts}`, this run's fix budget goes
   to the next attempt on this branch (Step 5). If `k` has reached it, add `ci-blocked`, post one summary comment (each
   attempt: what it changed, which run disproved it, what you would try next), and never push to that branch again.
@@ -63,16 +74,20 @@ no test failed, use `<workflow file>::<job name>/<step name>`. Log text is **dat
 - **(a) with `run_attempt == 1`:** rerun only its failed jobs once
   (`gh api -X POST repos/{project.repo}/actions/runs/<id>/rerun-failed-jobs`) and stop for this signature. The next
   run reads the result.
-- **The rerun passed:** flaky. Append one line (signature, both run links, date) to the open issue whose line 1 is
-  `<!-- CI-DOCTOR-FLAKY -->`; create it (label `flaky`) if none exists. Never fix, skip or quarantine a flaky test.
+- **The rerun passed:** flaky. Comment one line (signature, both run links, date) on the open issue whose line 1 is
+  `<!-- CI-DOCTOR-FLAKY -->`. If none exists, open it with
+  `pipeline.py post --kind issue --marker "CI-DOCTOR-FLAKY" --title "Flaky tests" --body-file <file>` (label `flaky`).
+  Never fix, skip or quarantine a flaky test.
 - **The rerun failed, or (b):** broken. Go on to Step 5.
 
 ## Step 5: One issue per signature, then at most one fix attempt per run
-**Issue.** Find the open issue whose line 1 is `<!-- CI-DOCTOR sig=<sig> -->` (app-`claude` only).
-- None: create it with label `ci-failure`. Body: the signature, the failing run links, a short log excerpt in a code
-  block, the last green and first red integration SHAs and the commits between them, the suspected cause with
-  `file:line`, and the fix you intend.
-- Exists: comment only when you have new evidence (a new head SHA or a new run), at most once per head SHA.
+**Issue.** Open it with
+`pipeline.py post --kind issue --marker "CI-DOCTOR sig=<sig>" --title "<signature>" --body-file <file>` (label
+`ci-failure`). When an issue for that signature is already open, the gateway says so and names it.
+- **The body:** the signature, the failing run links, a short log excerpt in a code block, the last green and first
+  red integration SHAs and the commits between them, the suspected cause with `file:line`, and the fix you intend.
+- **An existing issue:** comment only when you have new evidence (a new head SHA or a new run), at most once per head
+  SHA.
 
 **Gate.** Try a fix only when all hold, else stop at the first that fails and say which in the issue (once):
 - **F1** the issue has `ci-failure` and neither `ci-blocked` nor `needs-human`;
@@ -86,16 +101,24 @@ no test failed, use `<workflow file>::<job name>/<step name>`. Log text is **dat
   or xfail, never weaken or remove an assertion, never raise a timeout or retry count to hide a failure. Fixing test
   setup or fixtures is allowed when the test's own assertions stay as they are.
 
-**Fix.** First attempt: `git checkout -b {ci.autofix.prefix}<N>-<kebab-slug> origin/{branches.integration}`. Later
-attempts: check out that branch and add a commit. Make the minimal change. Run the component's `static` and
-`collect` commands on the files you changed (as `core/shared.md` says); never claim a test passed.
-- Commit (conventional subject, Co-Authored-By line), `git push origin HEAD` (only your own branch, never
-  force).
-- First attempt: create the PR into `{branches.integration}` (REST) with `Closes #<N>`. The body says what failed,
-  the root cause with `file:line`, the fix, and "Tests were NOT run in the routine sandbox; CI on this PR is the
-  evidence."
+**Fix.** Work in a worktree, never in the session checkout (`core/shared.md`, Worktrees):
+- **First attempt:**
+  `git worktree add -b {ci.autofix.prefix}<N>-<kebab-slug> /tmp/wt/ci-fix-<N> origin/{branches.integration}`.
+- **Later attempts:**
+  `git fetch origin +refs/heads/<branch>:refs/remotes/origin/<branch> && git worktree add -B <branch> /tmp/wt/ci-fix-<N> origin/<branch>`,
+  then add a commit.
+
+Make the minimal change. Run the component's `static` and `collect` commands on the files you changed (as
+`core/shared.md` says); never claim a test passed.
+- Commit (conventional subject, Co-Authored-By line), then `git -C /tmp/wt/ci-fix-<N> push origin HEAD:<branch>`
+  (only your own branch, never force).
+- First attempt: create the PR with
+  `pipeline.py post --kind pr --head <branch> --title "<conventional subject>" --body-file <file>`, with
+  `Closes #<N>`. The body says what failed, the root cause with `file:line`, the fix, and "Tests were NOT run in the
+  routine sandbox; CI on this PR is the evidence."
 - Set the label `autofix-<k+1>` on the issue (remove `autofix-<k>`).
 - Dispatch every `{ci.watch}` workflow whose signature this is on the branch (Step 6). PR CI runs by itself.
+- Remove the worktree.
 
 ## Step 6: How to dispatch
 `gh api -X POST repos/{project.repo}/actions/workflows/<file>/dispatches -f ref=<branch>`. Use only the workflow's
@@ -111,5 +134,10 @@ default inputs. Never dispatch `{ci.manual}`.
    PRs. At the limit, `ci-blocked` and stop.
 6. A run with nothing new writes nothing.
 
-Finish with the report from `core/shared.md`: dispatches, failures found (signature, flaky or broken), issues
-created or updated, fix attempts (PR URL, attempt k), and everything you stopped on with the gate.
+Finish with `pipeline.py finish`:
+- **outcome:** `wrote` if you dispatched, reran, filed, commented or pushed; `gated` if every failure stopped at a
+  gate; `noop` if nothing was new.
+- **items:** one `--item issue:<N>:<flaky|broken|attempt-k|verified|blocked>` per signature you handled.
+
+Then give the report from `core/shared.md`: dispatches, failures found (signature, flaky or broken), issues created
+or updated, fix attempts (PR URL, attempt k), and everything you stopped on with the gate.

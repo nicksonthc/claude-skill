@@ -1,13 +1,14 @@
-"""scorecard.py: REST paging, human vs routine attribution, #redo detection, merged vs closed."""
+"""scorecard.py: human vs routine attribution, #redo detection, merged vs closed, the run ledger and guardrails."""
 
-import importlib.util
+from __future__ import annotations
+
 import re
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 
-spec = importlib.util.spec_from_file_location("scorecard", Path(__file__).resolve().parents[1] / "core/scorecard.py")
-sc = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(sc)
+import scorecard as sc
+from conftest import load_profile
 
 APPROVERS = {"alice"}
 ROUTINE = {"slug": "claude"}
@@ -118,13 +119,59 @@ def test_no_search_endpoint_because_cloud_sessions_refuse_it():
     assert not re.search(r"[\"']search/", Path(sc.__file__).read_text())
 
 
-def test_pr_items_keeps_prs_and_reverts_are_found_among_them(monkeypatch):
+def test_pr_items_keeps_prs_updated_in_the_window_and_reverts_are_found_among_them(monkeypatch):
     items = [
         {"number": 5, "title": "fix: a", "pull_request": {}, "body": ""},
         {"number": 6, "title": "an issue", "body": ""},
         {"number": 7, "title": 'Revert "fix: a"', "pull_request": {}, "body": "Reverts o/r#5"},
     ]
-    monkeypatch.setattr(sc, "gh_items", lambda path: items)
-    prs = sc.pr_items("o/r")
+    asked = []
+    monkeypatch.setattr(sc, "gh_items", lambda path: asked.append(path) or items)
+    prs = sc.pr_items("o/r", datetime(2026, 10, 14, tzinfo=timezone.utc))
+    assert asked == ["repos/o/r/issues?state=all&per_page=100&since=2026-10-14T00:00:00Z"]
     assert [i["number"] for i in prs] == [5, 7]
     assert sc.reverted_numbers(prs, [pr(number=5, title="fix: a")]) == {5}
+
+
+def test_core_bin_never_calls_search_or_graphql_subcommands():
+    for path in (Path(sc.__file__).parent).glob("*.py"):
+        text = path.read_text()
+        assert not re.search(r"[\"']search/", text), path.name
+        assert not re.search(r"[\"']gh[\"'],\s*[\"'](pr|issue)[\"']", text), path.name
+
+
+def run(routine, started, outcome="noop", ended=None, dry_run=False):
+    return {
+        "routine": routine,
+        "session": started,
+        "started_at": started,
+        "ended_at": ended or started,
+        "outcome": outcome,
+        "dry_run": dry_run,
+    }
+
+
+def test_the_ledger_section_counts_outcomes_and_cron_slots_with_no_run():
+    profile = load_profile()  # pr-evaluator cron "0 2,5,8 * * *"; scorecard "30 1 * * 1"
+    since, now = datetime(2026, 11, 10, tzinfo=timezone.utc), datetime(2026, 11, 11, 9, 0, tzinfo=timezone.utc)
+    records = [
+        run("pr-evaluator", "2026-11-10T02:01:00Z", "wrote", "2026-11-10T02:11:00Z"),
+        run("pr-evaluator", "2026-11-10T05:02:00Z"),
+        run("pr-evaluator", "2026-11-11T02:00:30Z", "failed"),
+        run("pr-evaluator", "2026-11-11T05:00:00Z", dry_run=True),
+    ]
+    lines, data = sc.ledger_section(profile, records, since, now)
+    evaluator = data["pr-evaluator"]
+    assert (evaluator["runs"], evaluator["wrote"], evaluator["noop"], evaluator["failed"]) == (3, 1, 1, 1)
+    # slots from the first record (11-10 02:01) to now − 90 min (11-11 07:30): 11-10 05, 08 · 11-11 02, 05.
+    # 11-10 08 has no run, and the only run near 11-11 05 is a DRY RUN, so 2 are missed.
+    assert evaluator["missed_slots"] == 2
+    assert any(line.startswith("| pr-evaluator | 3 | 1 | 1 | 0 | 1 | 2 |") for line in lines)
+    assert sc.ledger_section(profile, [], since, now)[0][0].startswith("_No run records yet")
+
+
+def test_a_merge_or_close_made_through_the_claude_app_is_a_guardrail_breach():
+    by_app = {"event": "merged", "performed_via_github_app": {"slug": "claude"}}
+    by_human = {"event": "closed", "performed_via_github_app": None}
+    labelled = {"event": "labeled", "performed_via_github_app": {"slug": "claude"}}
+    assert sc.pr_breaches([pr(number=3, events=[by_app, by_human, labelled])]) == ["#3 merged"]

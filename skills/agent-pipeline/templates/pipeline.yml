@@ -71,8 +71,13 @@ risk:
 guards: []             # [{skill: <name>, when: "<which code paths>"}]
 extra_rules: []        # repo-specific rules every routine obeys
 
+ledger:                # every run stores one record (core/bin/ledger.py, REFERENCE.md §4)
+  branch: pipeline-ledger   # git: one JSON file per run on this branch; the first run creates it
+  turso_url: null           # set (libsql://<db>-<org>.turso.io) to store runs in Turso; git stays the fallback
+
 routines:
   # Launcher and sync: the agent-pipeline skill. status: active | planned | disabled. id: null until created.
+  # Optional per routine: environment_id, to run it in another cloud environment (e.g. one with network "None").
   - key: audit
     prompt: local/audit.md
     id: null
@@ -80,7 +85,7 @@ routines:
     cron: "0 22 * * 0"                 # weekly
     model: claude-opus-5-5
     tools: [Bash, Read, Glob, Grep, Write, Task, Skill, TodoWrite]
-    sources: [owner/name]              # add other repos the audit reads
+    sources: [owner/name]              # add other repos the audit reads; a multi-repo session loads no repo hooks
   - key: backlog-groom
     role: backlog-groom
     id: null
@@ -134,7 +139,7 @@ routines:
     status: planned
     cron: "30 5 * * 1-5"               # weekdays, after the evaluator's midday slot
     model: claude-opus-5-5
-    sources: [owner/name, owner/claude-skill]
+    sources: [owner/name, owner/claude-skill]   # a multi-repo session: no repo hooks load
     attribution: [{head: "rnd/*", base: main}]
 
 removed: []            # retired routines: keep key, id, removed date, reason and attribution so the scorecard still scores their PRs

@@ -4,33 +4,37 @@ stage: measure
 needs: [hub.issue]
 tools: [Bash, Read]
 writes:
-  - "one comment per ISO week on the hub issue, line 1 <!-- ROUTINE-SCORECARD week=<YYYY-Www> -->"
+  - {kind: comment, to: hub, marker: "ROUTINE-SCORECARD week=<week>", dedupe: marker, max: 1}
 ---
 # Scorecard
 
 You measure how this repo's routines are doing, by OUTCOMES only, and post one comment a week. You change nothing
 else.
 
-1. Run `python3 -c "import yaml" 2>/dev/null || pip install -q pyyaml`.
-2. Check whether this week is already done. If an app-`claude` comment on #{hub.issue} starts with
-   `<!-- ROUTINE-SCORECARD week=<this ISO week, YYYY-Www>`, write nothing and end with "Scorecard for this week already
-   posted".
-3. Run `python3 .claude/routines/core/scorecard.py --window 30 > /tmp/scorecard.md`.
+1. Run `python3 .claude/routines/core/bin/scorecard.py --window 30 --metrics-json /tmp/scorecard.json > /tmp/scorecard.md`.
    - The script owns the numbers. Never edit, recompute, round or "correct" them.
-   - The script prints the whole comment: the markers, the AI header, the table and the footer.
+   - It prints the whole comment: the PR outcomes per routine, the run ledger (runs, outcomes, missed cron slots), the
+     guardrail check, and the method note.
    - If it fails, write nothing and report the exact error.
-4. Edit `/tmp/scorecard.md` in exactly two places:
+2. Edit `/tmp/scorecard.md` in exactly two places:
    - Directly under the `## Routine scorecard` heading, add `**TL;DR:** <one sentence citing the headline number>`.
-   - Directly above the footer line, add a `### Observations` section of at most 3 bullets.
-     - Each bullet cites a number from the table, for example "gated-implementer: 2 of 9 PRs still open".
-     - Compare with the previous scorecard comment if there is one.
+   - Directly above the `_Method:` line, add an `### Observations` section of at most 3 bullets.
+     - Each bullet cites a number from the tables, for example "gated-implementer: 2 of 9 PRs still open".
+     - Any guardrail breach, and any routine with missed slots, comes first.
+     - Compare with the previous scorecard comment on #{hub.issue}, if there is one.
      - Give no advice beyond one clause per bullet. If nothing stands out, write "No notable change."
-5. Post it: `gh api repos/{project.repo}/issues/{hub.issue}/comments -F body=@/tmp/scorecard.md`.
+3. Post it: `pipeline.py post --kind comment --marker "ROUTINE-SCORECARD week=<YYYY-Www>" --body-file /tmp/scorecard.md`.
+   The week is the one on the script's first line. The gateway refuses a second scorecard for the same week.
+4. Store the numbers: `pipeline.py ledger metrics /tmp/scorecard.json --week <YYYY-Www>`.
 
 ## Rules
-1. Your only write is that one comment. Never edit the hub body, comment elsewhere, or create issues, PRs, branches,
-   labels or commits.
+1. Your only writes are that one comment and the week's metrics file. Never edit the hub body, comment elsewhere, or
+   create issues, PRs, branches, labels or commits.
 2. Never score or mention any agent's self-reported confidence.
 3. Post at most one scorecard comment per ISO week.
 
-Finish with one TL;DR line: the comment URL, or why nothing was posted.
+Finish with `pipeline.py finish`:
+- **outcome:** `wrote` if you posted; `noop` if this week was already posted.
+- **items:** `--item week:<YYYY-Www>:posted`.
+
+Then give one TL;DR line: the comment URL, or why nothing was posted.

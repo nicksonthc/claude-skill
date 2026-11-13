@@ -5,7 +5,8 @@ scorecard post their comments there. Any local audit routine must produce the bo
 parses it.
 
 ## Body
-The audit rewrites the whole body on every run, in this order:
+The audit rewrites the whole body on every run with `pipeline.py post --kind hub-body --body-file <file>`, which puts
+lines 1–3 in place. The body is, in this order:
 1. Line 1 is `{hub.marker}`, line 2 is the provenance marker, then the AI header (`core/shared.md`).
 2. `**TL;DR:** <counts per grade> — <n> new, <m> resolved this run; top fix: <rank-1 enhancement>`.
 3. `Last updated:` the UTC time, plus the commit SHA of every repo the audit read.
@@ -25,6 +26,8 @@ the whole rewrite. A comment is the larger container — up to 262,144 bytes —
 
 - **Measure before you write.** Count the codepoints of the body you assembled. Above **60,000**, relocate until it
   fits: that floor leaves one run's growth of headroom, and a body already over it is relocated this run, not next.
+  `pipeline.py post --kind hub-body` measures the assembled body and refuses one over the budget, so a run never
+  loses its rewrite to the cap.
 - **Relocate, never truncate.** What does not fit moves **verbatim** into this run's `<!-- AUDIT-CHANGELOG -->`
   comment, and the body keeps a one-line pointer naming the section and linking that comment. Relocating is not
   dropping: a finding you actually drop still belongs under `Removed this run` with its reason.
@@ -42,9 +45,9 @@ the whole rewrite. A comment is the larger container — up to 262,144 bytes —
   moves to Verified closed with the fixing commit. A finding you drop goes under Removed this run with the reason.
 - Every grade carries the `file:line` you read this run. A grade you cannot verify is `unverified`, together with
   what you would need to read.
-- Comment only when something moved: a new finding, a resolved one, or a changed grade. Post one comment with line 1
-  `<!-- AUDIT-CHANGELOG -->`, a TL;DR naming what moved, then one bullet per change. A run where nothing moved posts
-  nothing.
+- Comment only when something moved: a new finding, a resolved one, or a changed grade. Post one comment with
+  `pipeline.py post --kind comment --marker "AUDIT-CHANGELOG" --body-file <file>`: a TL;DR naming what moved, then one
+  bullet per change. A run where nothing moved posts nothing.
 - Prefer fewer real findings over a long speculative list. An ungrounded grade is worse than no grade.
 
 ## Groom items
@@ -53,7 +56,8 @@ itself, groom-key included. A human approves it by adding `groomed`, and that bo
 
 A human may instead approve the task line itself with "Convert to issue", which makes an issue whose title is that
 line and whose body is empty. The groom-key never reaches such an issue, so the title is the only link back.
-gated-implementer and pr-evaluator find an empty-bodied issue's groom item this way:
+`pipeline.py select` (`core/bin/gates.py`, `requirement` and `groom_item`) finds an empty-bodied issue's groom item
+for gated-implementer and pr-evaluator this way, and this section is its specification:
 1. **Normalise** a title: remove every `**`, cut from the first ` — score` to the end (older groom lines carried the
    score there), and trim the whitespace.
 2. **Search** the app-`claude` comments on #{hub.issue} whose line 1 is `<!-- BACKLOG-GROOM -->`, newest first. The

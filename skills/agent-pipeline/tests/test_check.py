@@ -1,4 +1,6 @@
-"""check.py: profile validation and the launcher text."""
+"""check.py: profile validation, the launcher text and the rulesets."""
+
+from __future__ import annotations
 
 import copy
 import importlib.util
@@ -84,6 +86,24 @@ def test_launcher_checks_out_integration_and_names_the_routine_and_its_prompt():
     assert "git fetch origin release --prune && git checkout origin/release" in text
     assert ".claude/routines/core/shared.md and .claude/routines/core/roles/pr-evaluator.md" in text
     assert ".claude/routines/local/audit.md" in check.launcher(profile, routine(profile, "audit"))
+    lines = text.splitlines()
+    begin = next(i for i, line in enumerate(lines) if "pipeline.py begin pr-evaluator" in line)
+    assert lines[begin - 1].startswith("git fetch") and "--dry-run when this message contains DRY RUN" in lines[begin]
+    # a repo still on a 1.x core has no pipeline.py: syncing before the core update must not break its routines
+    assert "pipeline.py" not in check.launcher(profile, routine(profile, "pr-evaluator"), control_plane=False)
+
+
+def test_a_1x_core_with_prose_writes_still_validates(tmp_path):
+    core = tmp_path / "core"
+    (core / "roles").mkdir(parents=True)
+    for name in ("shared.md", "hub-contract.md"):
+        (core / name).write_text((check.SKILL_CORE / name).read_text())
+    for role in check.SKILL_CORE.glob("roles/*.md"):
+        text = re.sub(r"writes:\n(  - .*\n)+", 'writes:\n  - "one comment on the hub issue"\n', role.read_text())
+        (core / "roles" / role.name).write_text(text)
+    assert not check.control_plane(core)
+    errors, _ = check.check(FIXTURES / "release-repo", load("release-repo"), core)
+    assert errors == []
 
 
 def exists(profile: dict, dotted: str) -> bool:
@@ -119,3 +139,59 @@ def test_role_front_matter_is_complete():
         assert meta.get("role") == path.stem
         assert meta.get("tools") and isinstance(meta.get("needs"), list) and meta.get("writes")
         assert re.fullmatch(r"[a-z-]+", meta["role"])
+
+
+def test_writes_front_matter_must_be_structured():
+    assert (
+        check.write_problems("r", [{"kind": "comment", "to": "hub", "marker": "X", "max": 1, "dedupe": "marker"}]) == []
+    )
+    problems = check.write_problems(
+        "r",
+        [
+            "one comment",
+            {"kind": "tweet"},
+            {"kind": "comment", "on": "hub"},
+            {"kind": "pr", "max": 0},
+            {"kind": "comment", "to": "pr", "marker": "<!-- X -->"},
+        ],
+    )
+    assert len(problems) == 5 and "to must be one of" in problems[2]
+
+
+def test_the_ledger_block_and_routine_environments_are_validated():
+    profile = copy.deepcopy(load("release-repo"))
+    profile["ledger"] = {"branch": "release", "turso_url": "postgres://x"}
+    routine(profile, "scorecard")["environment_id"] = "readonly"
+    errors, _ = run("release-repo", profile)
+    assert any("ledger.branch" in e for e in errors) and any("ledger.turso_url" in e for e in errors)
+    assert any("routine scorecard: environment_id" in e for e in errors)
+    profile["ledger"] = {"branch": "pipeline-ledger", "turso_url": "libsql://runs-acme.turso.io"}
+    routine(profile, "scorecard")["environment_id"] = "env_01ABC"
+    assert run("release-repo", profile)[0] == []
+
+
+def test_unregistered_hooks_are_a_note_and_registered_ones_are_not(tmp_path):
+    assert check.hook_problems(tmp_path) == list(check.HOOKS)
+    (tmp_path / ".claude").mkdir()
+    (tmp_path / ".claude/settings.json").write_text(" ".join(check.HOOKS))
+    assert check.hook_problems(tmp_path) == []
+
+
+def test_rulesets_protect_the_branches_with_no_bypass_and_require_ci_on_integration_only():
+    sets = {s["name"]: s for s in check.rulesets(load("release-repo"))}
+    assert set(sets) == {"agent-pipeline: release", "agent-pipeline: master", "agent-pipeline: pipeline-ledger"}
+    assert all(s["bypass_actors"] == [] and s["enforcement"] == "active" for s in sets.values())
+    types = {name: [r["type"] for r in s["rules"]] for name, s in sets.items()}
+    assert types["agent-pipeline: release"] == [
+        "deletion",
+        "non_fast_forward",
+        "pull_request",
+        "required_status_checks",
+    ]
+    assert types["agent-pipeline: master"] == ["deletion", "non_fast_forward", "pull_request"]
+    assert types["agent-pipeline: pipeline-ledger"] == ["deletion", "non_fast_forward"]
+    checks = sets["agent-pipeline: release"]["rules"][3]["parameters"]["required_status_checks"]
+    assert checks == [{"context": "test"}]
+    assert sets["agent-pipeline: release"]["rules"][2]["parameters"]["required_approving_review_count"] == 0
+    trunk = {s["name"] for s in check.rulesets(load("trunk-monorepo"))}
+    assert trunk == {"agent-pipeline: main", "agent-pipeline: pipeline-ledger"}

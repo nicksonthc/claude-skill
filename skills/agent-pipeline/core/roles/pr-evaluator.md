@@ -4,7 +4,7 @@ stage: evaluate
 needs: [ci.required, ci.proof]
 tools: [Bash, Read, Glob, Grep, Skill, TodoWrite]
 writes:
-  - "one comment per PR per head SHA, line 1 <!-- PR-EVALUATION sha=<head> verdict=<verdict> -->"
+  - {kind: comment, to: pr, marker: "PR-EVALUATION sha=<head> verdict=<verdict>", dedupe: marker, max: 3}
 ---
 # PR evaluator
 
@@ -16,64 +16,59 @@ Before judging any change, load the skills in `{guards}` whose `when` applies, a
 covers the area.
 
 ## Step 1: Select
-This step is deterministic and takes no judgement. List the open PRs (REST). A PR is **eligible** only when all of
-these hold:
-- its base is `{branches.integration}`;
-- its head starts with one of `{evaluate.heads}`, or it carries the label `{evaluate.opt_in_label}` added app-null by
-  someone in `{approvers}` (the opt-in);
-- it is not a draft;
-- no app-`claude` comment on it starts with `<!-- PR-EVALUATION sha=<its current head SHA>`.
+Run `pipeline.py select pr-evaluator`. The script picks, without judgement:
+- **eligible PRs:** open, into `{branches.integration}`, not a draft, and not yet evaluated at its head SHA. Its head
+  starts with one of `{evaluate.heads}`, or it carries the label `{evaluate.opt_in_label}` added app-null by someone in
+  `{approvers}` (the opt-in; `scope` says which). A PR whose last verdict was CI-MISSING becomes eligible again once
+  its checks exist.
+- **`evaluate`:** at most 3, lowest number first.
+- **`waiting`:** PRs whose checks are still running. Leave them; the next run picks them up.
 
-There is one exception to the last condition. If the newest such comment carries `verdict=CI-MISSING` and the checks
-now exist, the PR is eligible again. A new push changes the head SHA, so a redone PR becomes eligible by itself.
-
-Evaluate at most 3 PRs per run, lowest PR number first. If no PR is eligible, write nothing and end with "no PRs to
-evaluate".
+Each PR in `evaluate` carries its `requirement`, its `ci` and `proof` check states, the `objective_verdict` they
+force, and the `worktree` command.
 
 ## Step 2: The requirement
-- Find the issue through `Closes #<N>` in the PR body.
-- The requirement is that issue's body. If the body is empty, it is the acceptance criteria of the issue's groom
-  item, found exactly as `core/hub-contract.md` (Groom items) says. Never use the PR body, with one exception: an
-  opted-in PR with no `Closes #<N>` whose author is a human (the PR is app-null) takes its requirement from its own
-  body.
-- List the acceptance criteria, one testable statement each. If there are none you can test, or they are ambiguous,
-  the verdict is NEEDS-HUMAN, naming the exact question.
+- The requirement is `requirement`, never the PR body. It is the issue's own text, or the groom item the issue came
+  from, with its acceptance criteria. The one exception: an opted-in PR with no `Closes #<N>` whose author is a human
+  (the PR is app-null) takes its requirement from its own body (`requirement.source: pr-body`).
+- List the acceptance criteria, one testable statement each.
+- If `requirement.source` is `none`, or the criteria are ambiguous or untestable, the verdict is NEEDS-HUMAN, naming
+  the exact question.
 
-Check out the PR head detached and read-only: `git fetch origin pull/<N>/head && git checkout --detach FETCH_HEAD`.
-Read the whole PR diff.
+Check out the PR head with the `worktree` command, never in the session checkout. Read the whole PR diff and the files
+from `/tmp/wt/pr-<N>`.
 
 ## Step 3: Objective checks
-Run them; never estimate them. You run no tests: test evidence comes only from CI on the head SHA.
-- **E1 CI.** Read the check-runs and the commit status for the head SHA.
-  - Every name in `{ci.required}` must be a check-run from the app `github-actions` that concluded `success`.
-  - Still running: end this PR quietly; the next run picks it up.
-  - Failed: REWORK, quoting the failing step and test name.
-  - Missing more than `{ci.missing_after_hours}` hours after the push: NEEDS-HUMAN with `verdict=CI-MISSING`, naming
-    the missing check. It may be misnamed, or the base may not trigger CI.
-  - Other commit statuses (for example a review bot) are information only.
-  - `{ci.manual}` checks are never part of PR CI. Never trigger them.
+Report these; never estimate them. You run no tests: test evidence comes only from CI on the head SHA.
+- **E1 CI.** `ci` lists each `{ci.required}` check from `github-actions` on the head SHA.
+  - `failed`: REWORK. Open the check's `url` and quote the failing step and test name.
+  - `missing` (no check `{ci.missing_after_hours}` hours after the push): NEEDS-HUMAN with `verdict=CI-MISSING`,
+    naming the missing check. It may be misnamed, or the base may not trigger CI.
+  - Other commit statuses (for example a review bot) are information only. `{ci.manual}` checks are never part of PR
+    CI. Never trigger them.
 - **E2 Scope.** Every changed file is explained by the issue. Flag:
   - drive-by refactors or formatting;
   - changes the issue did not ask for under `.claude/`, decision records, CLAUDE.md or `{orient.invariants}`;
   - any edit to test files the issue calls approved.
-- **E3 Test integrity.** In the test diff, flag deleted tests, removed or weakened assertions, and every new
-  skip or xfail. A strict xfail naming the issue is allowed only when the issue is that known violation.
-- **E4 The test proves the defect.** Read the check `{ci.proof}` for the head SHA. It runs the PR's new or changed
-  tests against the base code and requires them to fail.
-  - Passed means proven.
-  - Failed means REWORK: the tests pass without the fix, or none were added.
-  - Missing or pending: handle it like E1.
-  - Also read the test itself and confirm it asserts an acceptance criterion, not something incidental.
-  - A `{ci.autofix.prefix}` PR fixes a failure an existing test already shows, so `{ci.proof}` does not apply. Its
-    proof is the issue's `CI-DOCTOR` evidence: the signature failed on `{branches.integration}`, and the same
-    workflow passed on this head SHA. If either run is missing, handle it like E1.
+- **E3 Test integrity.** In the test diff, flag deleted tests, removed or weakened assertions, and every new skip or
+  xfail. A strict xfail naming the issue is allowed only when the issue is that known violation.
+- **E4 The test proves the defect.** `proof` is the check `{ci.proof}`. It runs the PR's new or changed tests against
+  the base code and requires them to fail.
+  - `green` means proven.
+  - `failed` means REWORK: the tests pass without the fix, or none were added.
+  - `missing` is handled like E1.
+  - Also read the test itself, and confirm it asserts an acceptance criterion, not something incidental.
+  - A `{ci.autofix.prefix}` PR (`ci_fix: true`) fixes a failure an existing test already shows, so `{ci.proof}` does
+    not apply and `proof.state` is `n/a`. Its proof is the issue's `CI-DOCTOR` evidence: the signature failed on
+    `{branches.integration}`, and the same workflow passed on this head SHA. If either run is missing, handle it like
+    E1.
 - **E5 Risk net.** If the diff touches a `{risk.t2}` path, a test under `{risk.t2_tests}` must cover it. When that
   coverage lives only in `{ci.manual}`, the verdict notes that a human must run it before merge.
 - **E6 Invariants.** The change keeps `{orient.invariants}` and every rule in `{extra_rules}` true, and contradicts no
   decision record.
 
 ## Step 4: Requirement coverage
-This step is judgement, grounded in the diff. For each acceptance criterion give COVERED, PARTIAL, MISSING or WRONG,
+This step is judgement, grounded in the diff. For each acceptance criterion, give COVERED, PARTIAL, MISSING or WRONG,
 with the `file:line` in the diff that implements it and the test that proves it. A criterion with no test is at best
 PARTIAL. Never mark COVERED from the PR description. List anything the diff does that the issue did not ask for.
 
@@ -84,12 +79,13 @@ PARTIAL. Never mark COVERED from the PR description. List anything the diff does
 - **NEEDS-HUMAN:** ambiguous or missing criteria, an open design or protocol question, or a missing CI check. State
   the question.
 
-Your confidence is never the verdict. You may add it for information only.
+`objective_verdict` is a floor: when it says REWORK or CI-MISSING, your verdict is at least that. Your confidence is
+never the verdict. You may add it for information only.
 
 ## Step 6: Report
-Post one comment per PR per head SHA. Line 1 is exactly
-`<!-- PR-EVALUATION sha=<full head SHA> verdict=<PASS|REWORK|NEEDS-HUMAN|CI-MISSING> -->`, followed by the header
-lines from `core/shared.md`, then:
+Post one comment per PR per head SHA:
+`pipeline.py post --kind comment --issue <N> --marker "PR-EVALUATION sha=<full head SHA> verdict=<PASS|REWORK|NEEDS-HUMAN|CI-MISSING>" --body-file <file>`.
+The body is:
 - `**TL;DR:** <PASS | REWORK | NEEDS-HUMAN>: <one sentence>`
 - `Requirement coverage: X/Y`, plus a table: criterion | verdict | evidence file:line | test.
 - A table of E1–E6: check | result | note. Say plainly which checks did not run, and why.
@@ -97,12 +93,15 @@ lines from `core/shared.md`, then:
   redo-executor act on them."
 - For PASS, end with: "Evaluator pass. A human still reviews and merges."
 
-Then stop on that PR, and restore the checkout with `git checkout --detach origin/{branches.integration}`.
+Then remove the worktree: `git worktree remove --force /tmp/wt/pr-<N>`.
 
 ## Rules
 1. Never merge, approve, request changes on, close or reopen a PR, and never submit a review. You write comments only.
 2. Never push, commit, edit files, or create branches, issues or labels. You are read-only on code.
 3. Never start a redo yourself. Only a human approver's `#redo` starts redo-executor.
 
-Finish with the report from `core/shared.md`: the PRs screened, the PRs evaluated with their verdicts, and the PRs
-skipped and why.
+Finish with `pipeline.py finish`:
+- **outcome:** `wrote` if you posted an evaluation; `noop` if nothing was eligible.
+- **items:** one `--item pr:<N>:<verdict>` per PR you evaluated.
+
+Then give the report from `core/shared.md`, listing the PRs left waiting and why.

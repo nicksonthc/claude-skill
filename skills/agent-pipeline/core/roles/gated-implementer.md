@@ -4,9 +4,10 @@ stage: build
 needs: [approvers, components, ci.required, ci.proof]
 tools: [Bash, Read, Glob, Grep, Write, Edit, Task, Skill, TodoWrite]
 writes:
-  - "branch groomed/<issue>-<slug> off origin/{branches.integration}"
-  - "PR into {branches.integration} with 'Closes #<issue>'; at most min(2, wip.limit − open) per run"
-  - "a gate comment on a skipped issue; one run summary on the hub, line 1 <!-- IMPLEMENTATION-RUN"
+  - {kind: push, head: "groomed/"}
+  - {kind: pr, head: "groomed/", max: 2}
+  - {kind: comment, to: issue, marker: "GATE issue=<n> gate=<gate> base=<sha>", dedupe: gate}
+  - {kind: comment, to: hub, marker: "IMPLEMENTATION-RUN base=<sha>", max: 1}
 ---
 # Gated implementer
 
@@ -16,29 +17,29 @@ every gate passes. When in doubt, you ask on the issue instead of coding.
 Before you change any code, read the repo's CLAUDE.md for its architecture, code style and working style: surgical
 changes, the simplest fix, every changed line traceable to the issue.
 
-## Run-level gate
-**G3 WIP.** List the open PRs (REST, with their files). Count those whose base is `{branches.integration}`, or whose
-base starts with a prefix in `{wip.prefixes}`. A `{branches.integration}` → `{branches.production}` sync PR does not
-count. If the count is `{wip.limit}` or more, stop: "Skipped: <count> open PRs". Otherwise this run may open at most
-min(2, {wip.limit} − count) PRs.
+## Step 1: Select
+Run `pipeline.py select gated-implementer`. The script has already applied the deterministic gates:
+- **G3 WIP:** `budget` is how many PRs this run may open, at most 2. `stop` means the WIP limit is reached or nothing
+  is ready.
+- **G1 Human approval:** the `groomed` label came from an approver, by hand.
+- **G2 Not in flight:** no open PR names the issue, and no `groomed/<N>` branch exists.
 
-## Candidates
-List the open issues labelled `groomed` (REST), oldest first. For each one, check the gates in order and stop at the
-first that fails.
+Each candidate is listed oldest first. A candidate with `eligible: false` failed G1 or G2: skip it silently. Work
+through the eligible ones in order until you have opened `budget` PRs.
 
-- **G1 Human approval.** In the issue timeline, the `labeled` event for `groomed` must be app-null, and its actor
-  must be in `{approvers}`. Anything else means skip silently.
-- **G2 Not in flight.** No open PR body references `#<N>` as a whole number (`#<N>\b`, so `#24` never matches
-  `#247`), and no branch `groomed/<N>-*` exists. Otherwise skip silently.
-- **G4 No overlap.** List the files your change will touch. If any open PR touches one of them, skip and comment on
-  the issue naming that PR. Never stack a branch on another PR.
+## Step 2: The judgement gates
+Check each eligible candidate against these gates in order, and stop at the first that fails.
+- **G4 No overlap.** List the files your change will touch, then run `pipeline.py overlap --files <paths>`. If it
+  names a PR, skip and comment, naming that PR. Never stack a branch on another PR.
 - **G5 The requirement, and the defect it names.**
-  - Take the requirement from the issue body. If the body is empty, find the issue's groom item exactly as
-    `core/hub-contract.md` (Groom items) says, and take its acceptance criteria. If neither carries testable
-    acceptance criteria, skip and comment with the question a human must answer.
-  - Confirm the defect by tracing it through the code at the cited `file:line` on `origin/{branches.integration}`,
-    then write the test that fails because of it. You cannot run it; CI proves it. If the trace shows the defect is
-    already fixed, or the issue is wrong, comment with what you found (and the fixing commit) and skip.
+  - `requirement.source` is `issue-body` (the issue's own text), `groom-item` (the groom comment it came from, with
+    its acceptance criteria), or `none`.
+  - For `none`, skip and comment with `requirement.question`.
+  - If the acceptance criteria are not testable statements, skip and comment with the question a human must answer.
+  - Confirm the defect by tracing it through the code at the cited `file:line` on `origin/{branches.integration}`.
+    Then write the test that fails because of it. You cannot run that test; CI proves it.
+  - If the trace shows the defect is already fixed, or the issue is wrong, comment with what you found (and the
+    fixing commit) and skip.
 - **G6 Objective blockers.** Skip and comment if any of these is true:
   - the fix needs a design or protocol decision (state the exact question);
   - the fix lies outside every `{components}` path;
@@ -48,13 +49,15 @@ first that fails.
 - **G7 Invariants.** Load each skill in `{guards}` whose `when` applies, and read the relevant decision record. If the
   only fix would break `{orient.invariants}` or a rule in `{extra_rules}`, comment and skip.
 
-**Gate comments.** Line 1 is `<!-- GATE issue=<N> gate=<Gx> base=<short sha> -->`. Post one only when the newest
-app-`claude` GATE marker on that issue names a different gate, or a human commented after it. That way a skip is
-said once, not once every run.
+**Gate comments.** Post them with
+`pipeline.py post --kind comment --issue <N> --marker "GATE issue=<N> gate=<Gx> base=<short sha>" --body-file <file>`.
+The gateway posts a skip only when the newest GATE on that issue names a different gate, or a human commented after
+it. That way a skip is said once, not once every run.
 
-## Implement (the issue passed G1–G7)
-`git checkout -b groomed/<N>-<kebab-slug> origin/{branches.integration}`
-- Add the G5 test, in the component's test layout and reusing its `fixtures` (read them first), and the minimum fix.
+## Step 3: Implement (the candidate passed G1–G7)
+Work in a worktree, never in the session checkout:
+`git worktree add -b groomed/<N> /tmp/wt/<N> origin/{branches.integration}`.
+- Add the G5 test, in the component's test layout, reusing its `fixtures` (read them first), and the minimum fix.
   Add or change at least one test file, or the CI check `{ci.proof}` fails. If the issue links approved test files,
   never modify them.
 - Keep the change minimal: no drive-by refactors, no unrelated formatting.
@@ -72,28 +75,35 @@ said once, not once every run.
 
 Any failure you cannot fix: push nothing, comment on the issue with what failed, and move on.
 
-## Deliver
+## Step 4: Deliver
 - Commit with a conventional-commit subject. The body explains the user-facing effect. End with the Co-Authored-By
   line from `core/shared.md`.
-- `git push origin HEAD`. This pushes only the new `groomed/*` branch.
-- Create the PR into `{branches.integration}` (REST).
+- Push: `git -C /tmp/wt/<N> push origin HEAD:groomed/<N>`. The branch name is the claim on the issue. If the push is
+  rejected because `groomed/<N>` already exists, another run claimed the issue: drop it and move on.
+- Create the PR with `pipeline.py post --kind pr --head groomed/<N> --title "<conventional subject>" --body-file <file>`.
   - If the repo has `.github/PULL_REQUEST_TEMPLATE.md`, follow it. Otherwise write TL;DR · Why · Before → after ·
     What changed → what it fixes.
   - Put `Closes #<N>` in Why.
   - Under Notes, add how it was verified (the exact commands and their results), the G1–G8 results one line each, and
     anything left undone.
+- Remove the worktree.
 
-After all candidates, post ONE run summary on #{hub.issue}, but only if this run opened a PR or commented on an
-issue. Line 1 is `<!-- IMPLEMENTATION-RUN base=<short sha> -->`, then a TL;DR (PRs opened, issues skipped), a table
-issue | PR | confidence, and the issues skipped with the gate that stopped each.
+After all candidates, post ONE run summary on the hub, but only if this run opened a PR or commented on an issue:
+`pipeline.py post --kind comment --marker "IMPLEMENTATION-RUN base=<short sha>" --body-file <file>`. The body is a
+TL;DR (PRs opened, issues skipped), a table issue | PR | confidence, and the issues skipped with the gate that stopped
+each.
 
 ## Rules
 1. Never merge, approve, or close a PR or an issue. Never push to `{branches.integration}` or
    `{branches.production}`. Never force-push, rebase a pushed branch, or delete a branch.
 2. Never create issues or labels. Never edit the hub body.
 3. Only issues that pass G1 are work. An unlabelled item on the hub or in a groom comment never is.
-4. Never stack PRs. Never exceed the per-run PR budget from G3.
+4. Never stack PRs. Never exceed `budget`.
 5. A run with no eligible issue writes nothing and ends "no groomed issues ready".
 
-Finish with the report from `core/shared.md`: the PR count, the issues considered, the PRs opened (URLs), and the
-issues skipped with the gate that stopped each.
+Finish with `pipeline.py finish`:
+- **outcome:** `wrote` if you opened a PR or commented; `gated` if every candidate stopped at a gate; `noop` if
+  nothing was ready.
+- **items:** one `--item issue:<N>:<PR number or gate>` per candidate you considered.
+
+Then give the report from `core/shared.md`.

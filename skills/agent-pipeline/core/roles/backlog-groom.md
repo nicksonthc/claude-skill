@@ -4,8 +4,8 @@ stage: groom
 needs: [hub.issue, components]
 tools: [Bash, Read, Glob, Grep]
 writes:
-  - "one comment on the hub issue, line 1 <!-- BACKLOG-GROOM -->, at most 3 task-list picks"
-  - "one issue per pick, labelled groom-proposed and nothing else, at most 3 per run"
+  - {kind: issue, labels: [groom-proposed], max: 3}
+  - {kind: comment, to: hub, marker: "BACKLOG-GROOM", max: 1}
 ---
 # Backlog groom
 
@@ -19,24 +19,24 @@ listing the picks as tickable task-list items that link to those issues. Approva
 `groomed` to the issue. gated-implementer builds only `groomed` issues, so a `groom-proposed` issue is a proposal and
 nothing else.
 
-## Step 0: WIP gate
-List the open PRs (REST). Count those whose base is `{branches.integration}`, or whose base starts with a prefix in
-`{wip.prefixes}`. A `{branches.integration}` → `{branches.production}` sync PR does not count. If the count is above
-`{wip.limit}`, write nothing and end with "Skipped: <count> open PRs (> {wip.limit})".
+## Step 1: Select
+Run `pipeline.py select backlog-groom`. A `stop` field means:
+- the WIP gate failed (more than `{wip.limit}` open PRs), or
+- the hub #{hub.issue} is closed or missing.
 
-## Step 1: Inputs
-- **The hub body.** The section whose heading starts with `Enhancement suggestions` is the ranked candidate list. The
-  findings sections hold each item's grounding `file:line` (`core/hub-contract.md`).
-- **Every hub comment** (REST). From app-`claude` comments only, collect:
-  - the earlier groom comments (line 1 `<!-- BACKLOG-GROOM -->`) and every `<!-- groom-key: … -->` inside them;
-  - the implementer's run summaries (line 1 `<!-- IMPLEMENTATION-RUN`, or older ones starting `**Implementation run`)
-    and the items they skipped as design calls.
-- **The last 60 PRs and the last 60 issues** (REST, any state).
+Either way, write nothing. Otherwise the JSON carries your inputs:
+- `enhancements`: the hub's ranked "Enhancement suggestions" section, the candidate list (`core/hub-contract.md`).
+- `hub_body`: the whole hub. Its findings sections hold each item's grounding `file:line`.
+- `prior_groom_keys`: every groom-key already proposed, in a groom comment or in one of your open proposal issues.
+- `open_proposals`: your `groom-proposed` issues still open.
+- `proposal_label`: whether the label `groom-proposed` exists.
+- `implementation_runs`: the implementer's recent run summaries, including the items it skipped as design calls.
+- `recent_prs`, `recent_issues`: the last 60 of each, any state.
 
 ## Step 2: Candidates
 Give each ranked enhancement a stable **groom-key**: a short kebab-case slug of its title, never its rank (ranks move
 between audits). Drop a candidate when any of these is true:
-- its groom-key appears in an earlier groom comment;
+- its groom-key is in `prior_groom_keys`;
 - an open or merged PR, or an issue, already covers it (match on title, body, or a `groomed/*` branch name). Your
   own `groom-proposed` issues are issues: a pick that still sits in one is never proposed again;
 - the latest audit marks it closed or "fix in flight";
@@ -45,20 +45,20 @@ between audits). Drop a candidate when any of these is true:
 Put any candidate an implementer run skipped as a design call under "Needs a decision" instead of picking it.
 
 ## Step 3: Trace first, then score
-A complete, cited **trace** decides a pick. Your confidence never does. CI proves the defect later: on the
+A complete, cited **trace** decides a pick; your confidence never does. CI proves the defect later: on the
 implementer's PR, the check `{ci.proof}` runs the PR's new tests against the base code and requires them to fail.
 
 Work through the candidates in audit order:
-1. **Confirm.** Open the cited `file:line` on `origin/{branches.integration}`. If the code is gone or changed, drop
-   the candidate ("already changed"). If a later commit fixed it, drop it and name the commit.
+1. **Confirm.** Open the cited `file:line` on `origin/{branches.integration}`. If the code is gone or changed, drop the
+   candidate as "already changed". If a later commit fixed it, drop it and name the commit.
 2. **Trace.** Follow the failing path from its entry point to the defect, citing a `file:line` at every hop. Name the
    closest existing test. Then sketch the failing test to add, in the component's test framework and reusing its
    `fixtures`. The sketch stays unrun.
    - **Traced:** you read every hop in code, assumed none, and a fixture can express the test. The candidate is
      eligible.
    - **Unclear:** a hop is inferred, the defect depends on real hardware or timing, or no fixture can express it. It
-     is not eligible. List it under "Needs a decision" with what a human must supply.
-3. **Objective blockers.** Each one makes a candidate ineligible. List it under "Needs a decision" with the exact
+     is not eligible. List it under "Needs a decision", with what a human must supply.
+3. **Objective blockers.** Each one makes a candidate ineligible. List it under "Needs a decision", with the exact
    question:
    - the fix needs a design or protocol decision;
    - the fix lies outside every `{components}` path, so no test net exists;
@@ -66,6 +66,8 @@ Work through the candidates in audit order:
    - it would break an invariant (`{orient.invariants}`) or a rule in `{extra_rules}`.
 4. **Acceptance criteria.** Write 1–3 testable statements, one checkable fact each. The evaluator judges the PR
    against exactly these, so each must stand on its own.
+5. **Size.** Prefer items an expert could finish in about an hour, in a few files. Agents complete small items far
+   more reliably, and a large one belongs under "Needs a decision" with a proposed split.
 
 **Rank** the eligible candidates by score = Impact 0–5 + Size 0–3 + Rank bonus 0–2.
 - Impact: weak grades closed. "The user has no way out" outranks "wrong text".
@@ -77,23 +79,22 @@ Take the top 3. If none are eligible, write nothing and end with "No new eligibl
 ## Step 4: Open one issue per pick
 The issue is what a human labels, so it carries the requirement. For each pick, in order:
 
-1. **Preflight the label, once per run.** `gh api repos/{project.repo}/labels/groom-proposed`. A 404 means the label
-   does not exist: open no issue at all, post the comment of Step 5 as usual, and end your report asking a human to
-   create it. You never create, edit or delete a label.
-2. **Open the issue.** Title: the pick's task line, verbatim. Body: the header lines from `core/shared.md`, then the
-   pick's own bullets unchanged — **Why implement** through **Scope / risk**, with its `<!-- groom-key: … -->` — then
-   a line naming #{hub.issue} as where the pick came from.
-   `gh api repos/{project.repo}/issues -f title=<title> -F body=@<file> -f "labels[]=groom-proposed"`
-3. **Read it back.** `gh api repos/{project.repo}/issues/<N> --jq '[.labels[].name]'`. A token without push access
-   has its labels silently dropped, so an issue that comes back without `groom-proposed` is reported as unlabelled
-   in the comment and in your report. Never work around it with another label, and never add `groomed`.
+1. **Check the label.** If `proposal_label.exists` is false, open no issue at all: post the comment of Step 5 as
+   usual, and end your report asking a human to create `groom-proposed`. You never create, edit or delete a label.
+2. **Open the issue.** Write the body to a file: the pick's own bullets unchanged — **Why implement** through
+   **Scope / risk**, with its `<!-- groom-key: … -->` — then a line naming #{hub.issue} as where the pick came from.
+   Post it with `pipeline.py post --kind issue --title "<the pick's task line, verbatim>" --body-file <file>`. The
+   gateway adds the header and footer, and the label `groom-proposed`.
+3. **Read it back.** The gateway reads the new issue's labels back and reports `labelled`. A token without push
+   access has its labels silently dropped, so an issue with `labelled: false` is reported as unlabelled in the comment
+   and in your report. Never work around it with another label, and never add `groomed`.
 
 At most one issue per pick, so at most 3 per run. An item you could not open an issue for is still listed in the
 comment, marked `no issue`, and a human converts that one by hand.
 
 ## Step 5: Post one comment
-Write the body to a file and post it on #{hub.issue}. Line 1 is `<!-- BACKLOG-GROOM -->`, followed by the header lines
-from `core/shared.md`, then:
+Write the body to a file and post it with `pipeline.py post --kind comment --marker "BACKLOG-GROOM" --body-file <file>`.
+The body:
 
 ```
 ## Backlog grooming — YYYY-MM-DD ({branches.integration} @ <short sha>, audit run <n>)
@@ -126,10 +127,14 @@ proposal issue, and the only link back to this item when a human converts the li
 1. Your only writes are that one hub comment and one `groom-proposed` issue per pick. Never create a PR, branch,
    label or commit. Never add `groomed` — to your own proposals or to anything else — because only an approver's
    label starts work. Never edit the hub body, anyone's comment, or an issue you did not open this run.
-2. Never repeat a groom-key from an earlier groom comment.
+2. Never repeat a groom-key in `prior_groom_keys`.
 3. Ground every "Current" line in a `file:line` you read in this run. Never invent a line number.
 4. Never pick an item whose trace has an inferred hop. Never claim a test ran, and never write "reproduced".
 5. Never use your own confidence as a score, a filter or a reason to pick.
 
-Finish with the report from `core/shared.md`: the PR count and gate result, the candidates considered, the picks
-(with groom-keys), and what you dropped and why.
+Finish with `pipeline.py finish`:
+- **outcome:** `wrote` if you posted picks; `gated` if the WIP gate stopped you; `noop` if no item was eligible.
+- **items:** one `--item issue:<N>:proposed` per proposal issue, or `--item groom:<groom-key>:no-issue`.
+
+Then give the report from `core/shared.md`: the PR count and gate result, the candidates considered, the picks (with
+groom-keys and proposal issues), and what you dropped and why.

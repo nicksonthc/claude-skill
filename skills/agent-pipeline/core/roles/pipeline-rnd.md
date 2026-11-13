@@ -4,8 +4,10 @@ stage: improve
 needs: [rnd.upstream, rnd.upstream_branch, rnd.upstream_path, rnd.backlog, rnd.paths, rnd.checks, rnd.max_commits]
 tools: [Bash, Read, Glob, Grep, Write, Edit, WebSearch, WebFetch, Task, Skill, TodoWrite]
 writes:
-  - "one rolling branch rnd/pipeline-<YYYY-Www> in {project.repo} and in {rnd.upstream}, one commit per repo per run"
-  - "one PR per repo from that branch, body line 1 <!-- RND-LOG week=<YYYY-Www> -->, rewritten each run"
+  - {kind: push, head: "rnd/pipeline-", note: "one rolling branch in {project.repo} and in {rnd.upstream}, one commit per repo per run"}
+  - {kind: pr, head: "rnd/pipeline-", marker: "RND-LOG week=<week>", max: 1}
+  - {kind: pr-body, head: "rnd/pipeline-", marker: "RND-LOG week=<week>", max: 1}
+  - {kind: label, note: "rnd, on its own rolling PR"}
 ---
 # Pipeline R&D
 
@@ -15,6 +17,8 @@ merges them and re-syncs the routines.
 
 This session has two checkouts, {project.repo} and {rnd.upstream}, and runs without either repo's hooks. So you
 check the AI header and footer of every GitHub write yourself, and you push only to `rnd/pipeline-*` branches.
+`pipeline.py post` serves only {project.repo}: your PR there, and its body, go through it. Your {rnd.upstream} PR and
+its body are `gh api` calls that carry the header and footer you write yourself.
 
 ## Step 0: Pause and budget
 - If #{hub.issue} carries `agent-pause`, or an open `rnd/*` PR in either repo carries `rnd-stop`, write nothing and
@@ -69,10 +73,12 @@ Then, per repo you changed:
 - Commit with a conventional subject (`feat(agent-pipeline): …` upstream, `chore(routines): …` here), the
   Co-Authored-By line, and push the rolling branch (`git push origin HEAD`, never force).
 - No PR yet: create it, upstream into `{rnd.upstream_branch}`, here into `{branches.integration}`. Here, add the label
-  `rnd`.
+  `rnd`. Here it is `pipeline.py post --kind pr --head rnd/pipeline-<YYYY-Www> --marker "RND-LOG week=<YYYY-Www>"
+  --title "<subject>" --body-file <file>`.
 
 ## Step 6: Rewrite the PR body (both PRs)
-PATCH the whole body. Line 1 `<!-- RND-LOG week=<YYYY-Www> -->`, then the shared header, then:
+PATCH the whole body: here with `pipeline.py post --kind pr-body --issue <N> --marker "RND-LOG week=<YYYY-Www>"
+--body-file <file>`, upstream with `gh api`. Line 1 `<!-- RND-LOG week=<YYYY-Www> -->`, then the shared header, then:
 1. **TL;DR**: what this PR changes in the pipeline so far, in one sentence.
 2. **Flow**: a mermaid `flowchart` of the whole pipeline as it would be after this PR, the changed parts marked.
 3. **Features and gates**: a table of feature | gate or cap | pain it solves.
@@ -89,5 +95,10 @@ Link the two PRs to each other.
 3. Change only what Step 4 allows. Nothing takes effect until a human merges and syncs.
 4. A run that picks no item, or whose checks fail, pushes nothing; it may still update the PR body's R&D log.
 
-Finish with the report from `core/shared.md`: the failure modes found, the item picked, the sources fetched, the
-change (commit and PR URLs), the checks and their results, and what you skipped.
+Finish with `pipeline.py finish`:
+- **outcome:** `wrote` if you pushed or rewrote a PR body; `gated` on a pause or the budget; `noop` if no item was
+  picked.
+- **items:** `--item pr:<N>:<backlog item>`.
+
+Then give the report from `core/shared.md`: the failure modes found, the item picked, the sources fetched, the change
+(commit and PR URLs), the checks and their results, and what you skipped.
