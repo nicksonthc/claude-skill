@@ -20,6 +20,7 @@ skill here immediately changes the skill Claude Code loads.
 | [`toast-notification-history`](skills/toast-notification-history/) | Toasts with an audit trail: drop-in sonner wrapper that mirrors every toast into a capped localStorage history with the acting user stamped on, shown in a floating-bell slide-over with unread badge. |
 | [`bilingual-copy-store`](skills/bilingual-copy-store/) | Two-language (or N-language) UI with one shared copy dictionary, a Zustand-backed toggle that persists and stays in sync across every page of a multi-entry app, typed keys for dynamic/status text, and a safe overlay for translating strings that live in generator-owned JSON. |
 | [`threejs-glb-viewer`](skills/threejs-glb-viewer/) | Show a Blender GLB on a web page: zero-dependency GLB report (box, triangles, draw calls, required decoders), a self-contained single-file viewer (GLTFLoader + DRACO/KTX2/Meshopt, OrbitControls, EffectComposer) that frames itself from the model's measured box, manifest gallery mode, and the colour-management + export gate that catches a bad export. |
+| [`process-sim-3d`](skills/process-sim-3d/) | Deck / Excel / prompt → a 3D process walkthrough or timing-accurate simulation of a machine, cell or line: one reviewed spec drives layout, panels, config, views and analysis (compare setups, sweep, sizing, fill-up + sensitivity); standalone single-file HTML or React + three.js templates that build and pass Playwright checks; parametric equipment components; STEP → GLB. |
 | [`image-to-3d-blender`](skills/image-to-3d-blender/) | Reference image → GLB with headless Blender: silhouette extrusion for flat/transparent images, or reference-guided procedural studies (buildings, boats, trees, figures) via a shared `studio.py` helper library, with transparent preview, .blend and manifest entry. |
 | [`smart-task-guide`](skills/smart-task-guide/) | In-app smart guide: Ctrl+K task search that navigates and spotlights each control until the user presses the final button, plus branching troubleshooting runbooks that read backend data read-only, suggest answers, stop with a reason and leave a copyable case summary; mock-backend + Playwright proof recipe. |
 | [`agent-pipeline`](skills/agent-pipeline/) | Scheduled Claude Code cloud routines for any repo — audit → groom → gated implement → evaluate → `#redo` → release PR → weekly scorecard — run from one vendored generic core plus a per-repo `pipeline.yml` profile; install, sync, update-core and drift workflows, REST-only GitHub access, and cloud-only push-guard and AI-marker hooks. |
@@ -36,7 +37,21 @@ The R3F skills compose: `guided-placement` delegates camera framing to
 `r3f-scene-world` builds the world those three act in, and hands its GLB
 authoring to `image-to-3d-blender`. `threejs-glb-viewer` closes that loop — it
 displays and gates what `image-to-3d-blender` exports, before the asset is placed
-in a world or made interactive. Each also stands alone.
+in a world or made interactive. `process-sim-3d` builds process scenes from an
+engineer's deck or sheet and borrows from all of them — GLBs through
+`threejs-glb-viewer`, the look from `threejs-realism`, tour shots from
+`r3f-hero-camera`. Each also stands alone.
+
+### 3D skills at a pasar malam
+
+Every 3D skill's README opens with a short render of what it does, set at a
+Malaysian night market. Click through for the full GIF and details.
+
+| | | |
+|---|---|---|
+| [![process-sim-3d](skills/process-sim-3d/assets/process-sim-3d.gif)](skills/process-sim-3d/)<br>`process-sim-3d` — robot ayam goreng van | [![threejs-glb-viewer](skills/threejs-glb-viewer/assets/threejs-glb-viewer.gif)](skills/threejs-glb-viewer/)<br>`threejs-glb-viewer` — kuey teow stall turntable | [![image-to-3d-blender](skills/image-to-3d-blender/assets/image-to-3d-blender.gif)](skills/image-to-3d-blender/)<br>`image-to-3d-blender` — biscuit stall from a picture |
+| [![threejs-realism](skills/threejs-realism/assets/threejs-realism.gif)](skills/threejs-realism/)<br>`threejs-realism` — kopi & teh tarik van at night | [![interactive-3d-object](skills/interactive-3d-object/assets/interactive-3d-object.gif)](skills/interactive-3d-object/)<br>`interactive-3d-object` — select the ayam goreng van | [![guided-placement](skills/guided-placement/assets/guided-placement.gif)](skills/guided-placement/)<br>`guided-placement` — place a new canopy stall |
+| [![r3f-hero-camera](skills/r3f-hero-camera/assets/r3f-hero-camera.gif)](skills/r3f-hero-camera/)<br>`r3f-hero-camera` — shots over the stall row | [![r3f-scene-world](skills/r3f-scene-world/assets/r3f-scene-world.gif)](skills/r3f-scene-world/)<br>`r3f-scene-world` — walk the whole street | |
 
 The shop-floor app skills compose the same way: `console-app-shell` hosts the
 rest — the `system-status-popover` dot in its status row, the
