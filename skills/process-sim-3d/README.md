@@ -19,7 +19,7 @@ Turns an engineer's deck (PPT), spreadsheet (Excel) or text description into a b
 | `references/` | intake, spec schema, engine patterns, components, CAD (STEP/GLB + refused formats), visuals, panels, analysis, verification, stacks + hosting, pitfalls |
 | `templates/` | shared core + components + demo sim, standalone shell, React shell, tools/check.mjs — both stacks build and pass the checks |
 | `scripts/step2glb.py` | STEP → GLB, one node per solid, metres, Y-up (CadQuery 2.5) |
-| `examples/burn-in-cell/` | the burn-in cell project this was harvested from, with its results |
+| `examples/layered-rack-cell/` | the kind of machine this was harvested from, described generically |
 
 ## Works with
 `threejs-glb-viewer` (inspect a GLB before placing it), `threejs-realism` (photoreal pass), `r3f-hero-camera` (cinematic shots), `interactive-3d-object` (hover/select stations), `dataviz` (charts).

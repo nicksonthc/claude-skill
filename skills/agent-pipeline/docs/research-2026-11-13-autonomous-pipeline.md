@@ -224,7 +224,7 @@ writes conflict with 409 ([contents][gh-contents]).
 - **Permission denials.** A tooling permission denial is neither the service's answer nor a retry signal.
 - **The hub body** has a 60,000-codepoint budget under GitHub's 65,536 cap. Overflow is relocated, never truncated.
 - **ci-doctor:** a capped heal loop for red CI.
-- **pipeline-rnd:** a capped improvement loop. pilot-repo removed it on 2026-11-03, because every write to the
+- **pipeline-rnd:** a capped improvement loop. The pilot repo removed it on 2026-11-03, because every write to the
   upstream repo was refused.
 - **Evaluator scope.** `evaluate.heads`, plus an opt-in label an approver adds.
 

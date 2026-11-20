@@ -154,7 +154,7 @@ before updating the rest.
 - **Never `gh api --paginate` in a cloud session.** It follows `Link: rel="next"`, which GitHub writes as a numeric-ID
   path that the proxy refuses (403). Page 1 still prints, so the failure appears only once a list outgrows it.
   `pipeline.py` walks `page=N` instead.
-- **A routine's writes to a second repo were refused in practice.** pilot-repo's pipeline-rnd shipped nothing upstream
+- **A routine's writes to a second repo were refused in practice.** One pilot repo's pipeline-rnd shipped nothing upstream
   in six runs, and was removed on 2026-11-03. DRY RUN such a route before relying on it.
 - Sessions start on the default branch. A hook registered in `.claude/settings.json` takes effect only once it reaches
   that branch.
@@ -172,5 +172,5 @@ before updating the rest.
   Keep cron as the backstop if you add event triggers.
 - PyYAML can be missing from the cloud image. Install it in the environment's setup script; `pcfg.py` falls back to
   pip.
-- Whole-repo format checks are often already red (pilot-repo: black wants 16 files reformatted). A gate on
+- Whole-repo format checks are often already red (one pilot repo: black wanted 16 files reformatted). A gate on
   `black --check .` can never pass, so scope `static` to `{files}`.

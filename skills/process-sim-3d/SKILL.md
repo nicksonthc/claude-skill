@@ -6,9 +6,9 @@ description: Build a 3D process simulation or visual walkthrough of a machine, p
 # Process Sim 3D
 
 Turns an engineer's input (deck, sheet, prompt) into a browser 3D scene of their process: a **walkthrough**
-(visual story, quick) or a **simulation** (timing-accurate, with analysis). Harvested from a burn-in cell
-simulator (trolleys → handler → SCARA → lifter → 2 test racks); the machine-specific parts became the
-**spec** and the **process logic**, everything else is reusable template code.
+(visual story, quick) or a **simulation** (timing-accurate, with analysis). Harvested from a layered-rack
+process-cell simulator; the machine-specific parts became the **spec** and the **process logic**, everything
+else is reusable template code.
 
 **The one idea: everything flows through one reviewed spec.** `sim/spec.js` holds layout, components,
 params (every timing with unit, range and source), flow steps, camera views, tour and compare options.
@@ -67,6 +67,6 @@ can see what is real.
 - End-of-lot: the supply rule that feeds the last empty carrier must not depend on inbound still having parts.
 - Movable layout parts move only after right-click → "Drag to reposition…", never on a plain drag.
 
-Worked examples: the template demo (pick · process · place cell) and `examples/burn-in-cell/`.
+Worked examples: the template demo (pick · process · place cell) and `examples/layered-rack-cell/`.
 Compose with `threejs-glb-viewer` (inspect a GLB before placing it), `threejs-realism` (look pass),
 `r3f-hero-camera` (cinematic shots), `interactive-3d-object` (hover/select on stations), `dataviz` (charts).

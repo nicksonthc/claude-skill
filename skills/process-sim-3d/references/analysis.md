@@ -16,7 +16,7 @@ Show per row: each option's UPH, its limit (bottleneck), the gain, and a bar. Ty
 time. Add the configured value to the sweep so "the current setting" is always a row.
 - Bottleneck label from the buckets: cells processing ≥ 80% → "process-bound"; finished cells waiting
   ≥ 20% → "handler-bound"; else "balanced".
-- Ceiling = capacity / dwell (e.g. 64 sockets ÷ 6 h = 10.7 UPH): print it next to the measured UPH.
+- Ceiling = capacity / dwell (e.g. 48 sockets ÷ 4 h = 12 UPH): print it next to the measured UPH.
 
 ## Where does option B stop paying? (crossover)
 From the sweep, find the last value where the gain ≥ threshold (default 5%, editable) followed only by values

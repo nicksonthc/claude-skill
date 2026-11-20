@@ -2,3 +2,6 @@
 node_modules/
 __pycache__/
 *.pyc
+
+# private noun list for agent-pipeline core genericity test
+skills/agent-pipeline/tests/project-nouns.txt

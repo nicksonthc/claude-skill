@@ -23,13 +23,13 @@ export function makeConfig() { /* cfg = defaults of every param */ }
 ## params
 ```js
 { key: 'pickPlace', label: 'Robot pick & place / part', unit: 's', min: 1, max: 15, step: 0.1,
-  group: 'Robot', def: 4, hint: 'deck: 26 s per 4 units', src: 'deck p.9', restart: false }
+  group: 'Robot', def: 4, hint: 'deck: 16 s per 4 units', src: 'deck p.9', restart: false }
 ```
 - `unit` drives speed-ups: `'s'` (duration) is divided by 1.05 / 1.1 / 1.5; `'m/s'` (speed) multiplied.
   Counts (`'cols'`, `'trays'`, `'lanes'`) are never "sped up".
 - `restart: true` = changing it rebuilds the world (counts, layout); otherwise it applies to the next motion.
 - `src` is mandatory: `deck p.N`, `sheet!B12`, `prompt`, or `assumed`. Show `assumed` ones in the config hint.
-- Ranges: wide enough for the questions the engineer will ask (burn-in up to 12 h, not 1 h).
+- Ranges: wide enough for the questions the engineer will ask (a dwell up to 12 h, not 1 h).
 
 ## Conventions
 - Metres, seconds, Y up, X = main flow direction, Z = across. One structure width per module so modules

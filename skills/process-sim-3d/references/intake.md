@@ -10,7 +10,7 @@ Goal: a spec the engineer approves before any code. Every value has a **source**
 | Prompt text | as given | the same fields; ask for the rest |
 | Images (layout photos, screenshots) | Read tool | footprint, relative positions; mark dimensions `estimated from image` |
 
-Convert to metres and seconds at intake. Keep the original value + unit in `src` (`"deck p.7: 1,650 mm"`).
+Convert to metres and seconds at intake. Keep the original value + unit in `src` (`"deck p.7: 1,200 mm"`).
 
 ## Extract into the spec (order matters)
 1. **Product flow** — the unit (part, board, wafer, bundle), its carrier (tray, trolley, tote, board, rack
