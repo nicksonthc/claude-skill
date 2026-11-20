@@ -26,6 +26,7 @@ skill here immediately changes the skill Claude Code loads.
 | [`agent-pipeline`](skills/agent-pipeline/) | Scheduled Claude Code cloud routines for any repo — audit → groom → gated implement → evaluate → `#redo` → release PR → weekly scorecard — run from one vendored generic core plus a per-repo `pipeline.yml` profile; install, sync, update-core and drift workflows, REST-only GitHub access, and cloud-only push-guard and AI-marker hooks. |
 | [`guided-product-tour`](skills/guided-product-tour/) | Chaptered, role-filtered product tour for a React app: a spotlight card over the real screens that navigates and opens the menus and dialogs it points at, per-terminal progress ticks, first-run auto-start, and a hands-on sandbox finale built from the app's real components. |
 | [`focused-task-flow`](skills/focused-task-flow/) | One-task operator / kiosk station screen: a derived task state, a big "Now" prompt, exactly one primary, bench-distance sizing tokens, inline why + how-to-fix error blocks keyed by API error codes, WebAudio success/error cues, and a 16-point review rubric. |
+| [`calm-focused-ui`](skills/calm-focused-ui/) | Calm, large, one-job-per-screen UI for React + Tailwind (or Vue) desk tools used by operators and technicians: semantic light/dark tokens (16 px body, 44 px controls, 3:1 control edges), one primary per surface, disclosure capped at two levels, fix-it form errors, one-action table rows, side-sheet details, honest states, and a browser check for the floors. Build only. |
 | [`ui-motion-system`](skills/ui-motion-system/) | Motion and feedback for dashboards and kiosks: one token set and CSS-only utilities, skeletons instead of blank or zeroed screens, arrival flashes for live rows, tweened counters, confirmation pops, tilt/lift touch cards, a toast countdown bar, and a reduced-motion mode that keeps outlines. |
 | [`console-app-shell`](skills/console-app-shell/) | Shell for a multi-role internal app or shared kiosk: one nav registry behind a role-filtered sidebar, per-terminal page reordering, collapsible groups, registry-fed hub pages, a hover-intent account menu, and settings split into validated line-wide server settings and per-terminal preferences. |
 | [`replayable-audit-trail`](skills/replayable-audit-trail/) | Append-only audit events staged in the same transaction with name-based payloads, so a restore script can replay a wiped record onto reseeded reference data; deletions that take a reason and a snapshot, and a Deletion log read back from the trail. |
@@ -58,6 +59,7 @@ rest — the `system-status-popover` dot in its status row, the
 `toast-notification-history` bell, `keyboard-first-hotkeys`, the
 `guided-product-tour` action in its Guide group, and the admin pages of
 `request-error-logging` and `replayable-audit-trail` in its management hub.
+`calm-focused-ui` is the base look and layout every screen starts from, and
 `ui-motion-system` is the motion vocabulary they share, and
 `socketio-realtime-hooks` feeds their live data. `focused-task-flow` is the
 station screen built on `keyboard-first-hotkeys`. Each also stands alone.
