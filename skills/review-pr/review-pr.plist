@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- launchd does not expand ~ or $HOME, so fill the placeholders when installing:
+       mkdir -p ~/.config/review-pr && echo "your-org other-org" > ~/.config/review-pr/owners
+       sed -e "s|__SKILL_DIR__|$HOME/.claude/skills/review-pr|" -e "s|__HOME__|$HOME|" review-pr.plist \
+         > ~/Library/LaunchAgents/local.review-pr.plist
+       launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.review-pr.plist
+     Stop: launchctl bootout gui/$(id -u)/local.review-pr -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>local.review-pr</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__SKILL_DIR__/poll.sh</string>
+  </array>
+  <key>StartInterval</key><integer>300</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardErrorPath</key><string>__HOME__/.cache/review-pr/launchd.err</string>
+</dict>
+</plist>
